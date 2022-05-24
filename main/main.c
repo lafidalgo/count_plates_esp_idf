@@ -71,7 +71,7 @@ void enterDeepSleepTask(void *pvParameters)
             pdTRUE,                /* Wait for both bits. */
             portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
 
-        const int wakeup_time_sec = 20;
+        const int wakeup_time_sec = 60;
         // printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
         esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
@@ -137,7 +137,6 @@ void calibrateTask(void *pvParameters)
 
 void setUnitTask(void *pvParameters)
 {
-    uint32_t weightDifference;
     while (1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -151,7 +150,7 @@ void setUnitTask(void *pvParameters)
         unitWeight = (HX711Total - tare);
         printf("Valor Unitário: %d\n", unitWeight);
 
-        weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+        uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
         // Acorda quando o valor medido é maior que o definido por Over
         ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
         ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
@@ -230,6 +229,15 @@ void app_main(void)
         printf("Peso: %.2f g\n", weightGrams);
         float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
         printf("Quantidade: %.2f\n", quantityUnits);
+
+        uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+        // Acorda quando o valor medido é maior que o definido por Over
+        ulp_trshHoldOverADMSB = (HX711Total + weightDifference) >> 16;
+        ulp_trshHoldOverADLSB = (HX711Total + weightDifference) & 0xFFFF;
+        // Acorda quando o valor medido é menor que o definido por Under
+        ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
+        ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
+
         break;
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
