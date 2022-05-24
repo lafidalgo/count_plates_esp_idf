@@ -34,14 +34,15 @@
 #define BIT_2 (1 << 2)
 
 #define weightReference 2000 // 2 kg
+#define maxUnitDifference 2
+#define measureSignalReference -1 // O valor diminuir quando aumenta o peso
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 
-static RTC_DATA_ATTR struct timeval sleep_enter_time;
-static RTC_DATA_ATTR uint32_t tare;
-static RTC_DATA_ATTR int32_t calibration;
-static RTC_DATA_ATTR int32_t unitWeight;
+static RTC_DATA_ATTR uint32_t tare = 1;
+static RTC_DATA_ATTR float calibration = 1;
+static RTC_DATA_ATTR int32_t unitWeight = 1;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -71,17 +72,17 @@ void enterDeepSleepTask(void *pvParameters)
             portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
 
         const int wakeup_time_sec = 20;
-        printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+        // printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
         esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
         const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
         const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
 
-        printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
+        // printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
         esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
-        printf("Enabling ULP wakeup\n");
+        // printf("Enabling ULP wakeup\n");
         ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
         /* Disconnect GPIO12 and GPIO15 to remove current drain through
@@ -93,8 +94,6 @@ void enterDeepSleepTask(void *pvParameters)
         esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 
         printf("Entering deep sleep\n");
-        gettimeofday(&sleep_enter_time, NULL);
-
         esp_deep_sleep_start();
     }
 }
@@ -106,13 +105,13 @@ void tareTask(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Tare Task.\n");
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
         tare = HX711Total;
-        printf("Valor tara: %d\n", tare);
+        printf("Valor Tara: %d\n", tare);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
     }
 }
@@ -124,32 +123,42 @@ void calibrateTask(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Calibrate Task.\n");
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
-        printf("Valor tara: %d\n", tare);
-        calibration = (HX711Total - tare);
-        printf("Valor calibração: %d\n", calibration);
+        printf("Valor Tara: %d\n", tare);
+        calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
+        printf("Valor Calibração: %.2f\n", calibration);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
     }
 }
 
 void setUnitTask(void *pvParameters)
 {
+    uint32_t weightDifference;
     while (1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Set Unit Task.\n");
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
         unitWeight = (HX711Total - tare);
-        printf("Valor unitário: %d\n", unitWeight);
+        printf("Valor Unitário: %d\n", unitWeight);
+
+        weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+        // Acorda quando o valor medido é maior que o definido por Over
+        ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
+        ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
+        // Acorda quando o valor medido é menor que o definido por Under
+        ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
+        ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
+
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
     }
 }
@@ -157,10 +166,6 @@ void setUnitTask(void *pvParameters)
 //******************** App Main ********************
 void app_main(void)
 {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
-
     /*Criação Event Groups*/
     xEventGroupDeepSleep = xEventGroupCreate();
     if (xEventGroupDeepSleep == NULL)
@@ -207,20 +212,24 @@ void app_main(void)
     }
     case ESP_SLEEP_WAKEUP_TIMER:
     {
-        printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
+        printf("Wake up from timer.\n");
         break;
     }
     case ESP_SLEEP_WAKEUP_ULP:
     {
         printf("ULP wakeup\n");
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
+        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
+        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
         uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
         printf("Valor Total: %d\n", HX711Total);
         uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
         printf("Tipo threshold: %d\n", thresholdType_ulp);
+        float weightGrams = ((float)HX711Total - (float)tare) / calibration;
+        printf("Peso: %.2f g\n", weightGrams);
+        float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
+        printf("Quantidade: %.2f\n", quantityUnits);
         break;
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
