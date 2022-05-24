@@ -35,7 +35,9 @@
 
 #define weightReference 2000 // 2 kg
 #define maxUnitDifference 2
-#define measureSignalReference -1 // O valor diminuir quando aumenta o peso
+#define measureSignalReference -1  // O valor diminuir quando aumenta o peso
+#define ulpWakeUpPeriod 1000000    // Em us (1 s)
+#define ulpWakeUpPeriodFast 100000 // Em us (100 ms)
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -104,6 +106,7 @@ void tareTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Tare Task.\n");
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
         // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
@@ -112,6 +115,7 @@ void tareTask(void *pvParameters)
         printf("Valor Total: %d\n", HX711Total);
         tare = HX711Total;
         printf("Valor Tara: %d\n", tare);
+        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
     }
 }
@@ -122,6 +126,7 @@ void calibrateTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Calibrate Task.\n");
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
         // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
@@ -131,6 +136,7 @@ void calibrateTask(void *pvParameters)
         printf("Valor Tara: %d\n", tare);
         calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
         printf("Valor Calibração: %.2f\n", calibration);
+        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
     }
 }
@@ -141,6 +147,7 @@ void setUnitTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Set Unit Task.\n");
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
         // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
         uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
@@ -149,6 +156,7 @@ void setUnitTask(void *pvParameters)
         printf("Valor Total: %d\n", HX711Total);
         unitWeight = (HX711Total - tare);
         printf("Valor Unitário: %d\n", unitWeight);
+        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
 
         uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
         // Acorda quando o valor medido é maior que o definido por Over
@@ -246,7 +254,7 @@ void app_main(void)
         init_ulp_program();
     }
 
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     /*Criação Task Deep Sleep*/
     xTaskCreate(enterDeepSleepTask, "enterDeepSleepTask", configMINIMAL_STACK_SIZE * 5, NULL, 5, &taskEnterDeepSleepHandle);
@@ -283,7 +291,7 @@ static void init_ulp_program(void)
     ulp_trshHoldUnderADMSB = 208;
     ulp_trshHoldUnderADLSB = 60000;
 
-    ulp_set_wakeup_period(0, 1000000); // Set ULP wake up period T = 1s
+    ulp_set_wakeup_period(0, ulpWakeUpPeriod); // Set ULP wake up period T = 1s
 
     /* Start the program */
     err = ulp_run(&ulp_main - RTC_SLOW_MEM);
