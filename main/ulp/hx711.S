@@ -33,6 +33,10 @@ trshHoldUnderADLSB:
 thresholdType:
 .long 0x00
 
+.global onlyReadWeight
+onlyReadWeight:
+.long 0x00
+
 .bss//Variaveis sao declaradas dentro da secao .bss
 
 .text//O codigo é feito dentro da secao .text
@@ -53,6 +57,9 @@ thresholdType:
 
 	.global main
 	main://O codigo e iniciado aqui, equivale ao void setup()
+		move r3, thresholdType
+		move r0, 0x00
+		st r0, r3, 0
 		WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+6, 1, 1)//sobe add0
 
  	ReadHX711:
@@ -91,6 +98,9 @@ thresholdType:
 		SCLK_high               // 128 on next HX711 read, then leave SCLK hi for
 		SCLK_low                // for > 60 uS to power down HX711, ~10 clocks
 		SCLK_high
+		move r0, onlyReadWeight
+		ld r0, r0, 0
+		jumpr only_read_weight, 1, GE // jump to label if R0 >= 1
 
 	compare_trshHoldOver:
 		move r3, thresholdType
@@ -136,4 +146,10 @@ thresholdType:
 		ld r3, r3, 0
 		sub r0, r3, r2
 		jump wake_up, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		halt
+
+	only_read_weight:
+		move r3, thresholdType
+		move r0, 0x03
+		st r0, r3, 0
 		halt
