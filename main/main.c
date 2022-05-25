@@ -284,6 +284,7 @@ static void init_ulp_program(void)
     ulp_trshHoldUnderADLSB = 60000;
     // Seta se quiser só ler peso, limpa se quiser fazer a comparação
     ulp_onlyReadWeight = 0;
+    ulp_enterSleepHX711 = 1;
 
     ulp_set_wakeup_period(0, ulpWakeUpPeriod); // Set ULP wake up period T = 1s
 
@@ -297,6 +298,7 @@ static uint32_t readWeight(int repeatRead)
     uint32_t accumulatedTotal = 0;
 
     ulp_onlyReadWeight = 1;
+    ulp_enterSleepHX711 = 0;
     ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
 
     for (int count = 0; count < repeatRead; count++)
@@ -311,10 +313,12 @@ static uint32_t readWeight(int repeatRead)
         {
             ulp_set_wakeup_period(0, ulpWakeUpPeriod);
             ulp_onlyReadWeight = 0;
+            ulp_enterSleepHX711 = 1;
             return 0;
         }
         accumulatedTotal += HX711Total;
     }
+    ulp_enterSleepHX711 = 1;
     accumulatedTotal = accumulatedTotal / repeatRead;
 
     ulp_set_wakeup_period(0, ulpWakeUpPeriod);

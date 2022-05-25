@@ -37,6 +37,10 @@ thresholdType:
 onlyReadWeight:
 .long 0x00
 
+.global enterSleepHX711
+enterSleepHX711:
+.long 0x00
+
 .bss//Variaveis sao declaradas dentro da secao .bss
 
 .text//O codigo é feito dentro da secao .text
@@ -97,7 +101,12 @@ onlyReadWeight:
 	ReadDone:                   // must cycle SCLK one more time to set gain to
 		SCLK_high               // 128 on next HX711 read, then leave SCLK hi for
 		SCLK_low                // for > 60 uS to power down HX711, ~10 clocks
+		move r0, enterSleepHX711
+		ld r0, r0, 0
+		jumpr check_onlyReadWeight, 1, LT // jump to label if R0 < 1
 		SCLK_high
+	
+	check_onlyReadWeight:
 		move r0, onlyReadWeight
 		ld r0, r0, 0
 		jumpr only_read_weight, 1, GE // jump to label if R0 >= 1
