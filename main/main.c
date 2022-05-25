@@ -50,6 +50,8 @@ const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
 const int ext_wakeup_pin_3 = 13;
 
+gpio_num_t led_pin = GPIO_NUM_14;
+
 /*Variáveis para armazenamento do handle das tasks, queues, semaphores, timers e event groups*/
 TaskHandle_t taskEnterDeepSleepHandle = NULL;
 TaskHandle_t taskTareHandle = NULL;
@@ -62,6 +64,8 @@ EventGroupHandle_t xEventGroupDeepSleep;
 static void init_ulp_program(void);
 
 static uint32_t readWeight(int repeatRead);
+
+static void blinkLED(void);
 
 //******************** TASKS ********************
 void enterDeepSleepTask(void *pvParameters)
@@ -114,6 +118,7 @@ void tareTask(void *pvParameters)
             printf("Valor Total: %d\n", HX711Total);
             tare = HX711Total;
             printf("Valor Tara: %d\n", tare);
+            blinkLED();
         }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
     }
@@ -132,6 +137,7 @@ void calibrateTask(void *pvParameters)
             printf("Valor Tara: %d\n", tare);
             calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
             printf("Valor Calibração: %.2f\n", calibration);
+            blinkLED();
         }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
     }
@@ -159,6 +165,7 @@ void setUnitTask(void *pvParameters)
             // Acorda quando o valor medido é menor que o definido por Under
             ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
             ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
+            blinkLED();
         }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
     }
@@ -179,6 +186,13 @@ void app_main(void)
     xTaskCreate(tareTask, "tareTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskTareHandle);
     xTaskCreate(calibrateTask, "calibrateTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskCalibrateHandle);
     xTaskCreate(setUnitTask, "setUnitTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskSetUnitHandle);
+
+    /* Initialize selected GPIO as RTC IO, enable output, disable pullup and pulldown */
+    rtc_gpio_init(led_pin);
+    rtc_gpio_set_direction(led_pin, RTC_GPIO_MODE_OUTPUT_ONLY);
+    rtc_gpio_pulldown_dis(led_pin);
+    rtc_gpio_pullup_dis(led_pin);
+    rtc_gpio_set_level(led_pin, 0);
 
     switch (esp_sleep_get_wakeup_cause())
     {
@@ -245,8 +259,6 @@ void app_main(void)
         printf("Not a deep sleep reset, initializing ULP\n");
         init_ulp_program();
     }
-
-    // vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     /*Criação Task Deep Sleep*/
     xTaskCreate(enterDeepSleepTask, "enterDeepSleepTask", configMINIMAL_STACK_SIZE * 5, NULL, 5, &taskEnterDeepSleepHandle);
@@ -325,4 +337,15 @@ static uint32_t readWeight(int repeatRead)
     ulp_onlyReadWeight = 0;
 
     return accumulatedTotal;
+}
+
+void blinkLED(void)
+{
+    rtc_gpio_set_level(led_pin, 1);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    rtc_gpio_set_level(led_pin, 0);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    rtc_gpio_set_level(led_pin, 1);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    rtc_gpio_set_level(led_pin, 0);
 }
