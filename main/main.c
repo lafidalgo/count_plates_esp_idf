@@ -299,20 +299,20 @@ static void init_ulp_program(void)
     rtc_gpio_pullup_dis(gpio_num_adsk);
     rtc_gpio_hold_en(gpio_num_adsk);
 
-    /*uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+    uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
     // Acorda quando o valor medido é maior que o definido por Over
     ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
     ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
     // Acorda quando o valor medido é menor que o definido por Under
     ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
-    ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;*/
+    ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
 
-    // Acorda quando o valor medido é maior que o definido por Over
+    /*// Acorda quando o valor medido é maior que o definido por Over
     ulp_trshHoldOverADMSB = 211;
     ulp_trshHoldOverADLSB = 30196;
     // Acorda quando o valor medido é menor que o definido por Under
     ulp_trshHoldUnderADMSB = 208;
-    ulp_trshHoldUnderADLSB = 60000;
+    ulp_trshHoldUnderADLSB = 60000;*/
     // Seta se quiser só ler peso, limpa se quiser fazer a comparação
     ulp_onlyReadWeight = 0;
     ulp_enterSleepHX711 = 1;
