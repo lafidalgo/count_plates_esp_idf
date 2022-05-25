@@ -18,9 +18,6 @@
 #include "soc/soc_caps.h"
 #include "soc/rtc.h"
 
-#include <time.h>
-#include <sys/time.h>
-
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
 
@@ -66,6 +63,16 @@ static void init_ulp_program(void);
 static uint32_t readWeight(int repeatRead);
 
 static void blinkLED(void);
+
+static void nvsWriteUnsigned(const char *key, uint32_t value);
+
+static uint32_t nvsReadUnsigned(const char *key);
+
+static void nvsWriteSigned(const char *key, int32_t value);
+
+static int32_t nvsReadSigned(const char *key);
+
+static void initVariablesFromNVS(void);
 
 //******************** TASKS ********************
 void enterDeepSleepTask(void *pvParameters)
@@ -118,6 +125,7 @@ void tareTask(void *pvParameters)
             printf("Valor Total: %d\n", HX711Total);
             tare = HX711Total;
             printf("Valor Tara: %d\n", tare);
+            nvsWriteUnsigned("tareValue", tare);
             blinkLED();
         }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
@@ -137,6 +145,7 @@ void calibrateTask(void *pvParameters)
             printf("Valor Tara: %d\n", tare);
             calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
             printf("Valor Calibração: %.2f\n", calibration);
+            nvsWriteSigned("calibrateValue", (calibration * 10000));
             blinkLED();
         }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
@@ -157,6 +166,7 @@ void setUnitTask(void *pvParameters)
             printf("Valor Unitário: %d\n", unitWeight);
             float weightGrams = (float)unitWeight / calibration;
             printf("Peso Unitário: %.2f g\n", weightGrams);
+            nvsWriteSigned("unitWeightValue", unitWeight);
 
             uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
@@ -187,7 +197,7 @@ void app_main(void)
     xTaskCreate(calibrateTask, "calibrateTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskCalibrateHandle);
     xTaskCreate(setUnitTask, "setUnitTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskSetUnitHandle);
 
-    /* Initialize selected GPIO as RTC IO, enable output, disable pullup and pulldown */
+    /* Initialize LED GPIO */
     rtc_gpio_init(led_pin);
     rtc_gpio_set_direction(led_pin, RTC_GPIO_MODE_OUTPUT_ONLY);
     rtc_gpio_pulldown_dis(led_pin);
@@ -257,6 +267,7 @@ void app_main(void)
     case ESP_SLEEP_WAKEUP_UNDEFINED:
     default:
         printf("Not a deep sleep reset, initializing ULP\n");
+        initVariablesFromNVS();
         init_ulp_program();
     }
 
@@ -287,6 +298,14 @@ static void init_ulp_program(void)
     rtc_gpio_pulldown_dis(gpio_num_adsk);
     rtc_gpio_pullup_dis(gpio_num_adsk);
     rtc_gpio_hold_en(gpio_num_adsk);
+
+    /*uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+    // Acorda quando o valor medido é maior que o definido por Over
+    ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
+    ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
+    // Acorda quando o valor medido é menor que o definido por Under
+    ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
+    ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;*/
 
     // Acorda quando o valor medido é maior que o definido por Over
     ulp_trshHoldOverADMSB = 211;
@@ -348,4 +367,173 @@ void blinkLED(void)
     rtc_gpio_set_level(led_pin, 1);
     vTaskDelay(100 / portTICK_PERIOD_MS);
     rtc_gpio_set_level(led_pin, 0);
+}
+
+void nvsWriteUnsigned(const char *key, uint32_t value)
+{
+    nvs_handle handler_particao_nvs;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        return;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        return;
+    }
+
+    /* Atualiza valor */
+    err = nvs_set_u32(handler_particao_nvs, key, value);
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Erro ao gravar\n");
+        nvs_close(handler_particao_nvs);
+        return;
+    }
+    else
+    {
+        printf("Dado gravado com sucesso!\n");
+        nvs_commit(handler_particao_nvs);
+        nvs_close(handler_particao_nvs);
+    }
+}
+
+uint32_t nvsReadUnsigned(const char *key)
+{
+    nvs_handle handler_particao_nvs;
+    uint32_t value;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        return 0;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        return 0;
+    }
+
+    /* Faz a leitura do dado associado a chave definida em CHAVE_NVS */
+    err = nvs_get_u32(handler_particao_nvs, key, &value);
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao fazer leitura do dado\n");
+        nvs_close(handler_particao_nvs);
+        return 0;
+    }
+    else
+    {
+        // printf("Dado lido com sucesso!\n");
+        nvs_close(handler_particao_nvs);
+        return value;
+    }
+}
+
+void nvsWriteSigned(const char *key, int32_t value)
+{
+    nvs_handle handler_particao_nvs;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        return;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        return;
+    }
+
+    /* Atualiza valor */
+    err = nvs_set_i32(handler_particao_nvs, key, value);
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Erro ao gravar\n");
+        nvs_close(handler_particao_nvs);
+        return;
+    }
+    else
+    {
+        printf("Dado gravado com sucesso!\n");
+        nvs_commit(handler_particao_nvs);
+        nvs_close(handler_particao_nvs);
+    }
+}
+
+int32_t nvsReadSigned(const char *key)
+{
+    nvs_handle handler_particao_nvs;
+    int32_t value;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        return 0;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        return 0;
+    }
+
+    /* Faz a leitura do dado associado a chave definida em CHAVE_NVS */
+    err = nvs_get_i32(handler_particao_nvs, key, &value);
+
+    if (err != ESP_OK)
+    {
+        printf("[ERRO] Falha ao fazer leitura do dado\n");
+        nvs_close(handler_particao_nvs);
+        return 0;
+    }
+    else
+    {
+        // printf("Dado lido com sucesso!\n");
+        nvs_close(handler_particao_nvs);
+        return value;
+    }
+}
+
+void initVariablesFromNVS(void)
+{
+    tare = nvsReadUnsigned("tareValue");
+    if (!tare)
+    {
+        nvsWriteUnsigned("tareValue", 1);
+        tare = nvsReadUnsigned("tareValue");
+    }
+    printf("Valor Tara: %d\n", tare);
+
+    calibration = ((float)nvsReadSigned("calibrateValue") / 10000);
+    if (!calibration)
+    {
+        nvsWriteSigned("calibrateValue", 1);
+        calibration = ((float)nvsReadSigned("calibrateValue") / 10000);
+    }
+    printf("Valor Calibração: %.2f\n", calibration);
+
+    unitWeight = nvsReadSigned("unitWeightValue");
+    if (!unitWeight)
+    {
+        nvsWriteSigned("unitWeightValue", 1);
+        unitWeight = nvsReadSigned("unitWeightValue");
+    }
+    printf("Valor Unitário: %d\n", unitWeight);
 }

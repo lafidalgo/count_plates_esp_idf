@@ -3,7 +3,20 @@
   "files.associations": {
     "rtc_io.h": "c",
     "ulp.h": "c",
-    "ulp_main.h": "c"
+    "ulp_main.h": "c",
+    "*.inc": "c",
+    "*.tcc": "c",
+    "optional": "c",
+    "istream": "c",
+    "ostream": "c",
+    "ratio": "c",
+    "system_error": "c",
+    "array": "c",
+    "functional": "c",
+    "regex": "c",
+    "tuple": "c",
+    "type_traits": "c",
+    "utility": "c"
   },
   "idf.adapterTargetName": "esp32",
   "idf.flashType": "UART",
