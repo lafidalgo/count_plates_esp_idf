@@ -35,9 +35,9 @@
 
 #define weightReference 2000 // 2 kg
 #define maxUnitDifference 2
-#define measureSignalReference -1  // O valor diminuir quando aumenta o peso
-#define ulpWakeUpPeriod 1000000    // Em us (1 s)
-#define ulpWakeUpPeriodFast 100000 // Em us (100 ms)
+#define measureSignalReference -1 // O valor diminuir quando aumenta o peso
+#define ulpWakeUpPeriod 1000000   // Em us (1 s)
+#define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -60,6 +60,8 @@ EventGroupHandle_t xEventGroupDeepSleep;
 
 //******************** FUNCTIONS ********************
 static void init_ulp_program(void);
+
+static uint32_t readWeight(int repeatRead);
 
 //******************** TASKS ********************
 void enterDeepSleepTask(void *pvParameters)
@@ -106,20 +108,13 @@ void tareTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Tare Task.\n");
-        ulp_onlyReadWeight = 1;
-        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
-        while (!(ulp_HX711LoWord & UINT16_MAX))
-            ;
-        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
-        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
-        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-        printf("Valor Total: %d\n", HX711Total);
-        tare = HX711Total;
-        printf("Valor Tara: %d\n", tare);
-        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-        ulp_onlyReadWeight = 0;
+        uint32_t HX711Total = readWeight(5);
+        if (HX711Total)
+        {
+            printf("Valor Total: %d\n", HX711Total);
+            tare = HX711Total;
+            printf("Valor Tara: %d\n", tare);
+        }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
     }
 }
@@ -130,21 +125,14 @@ void calibrateTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Calibrate Task.\n");
-        ulp_onlyReadWeight = 1;
-        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
-        while (!(ulp_HX711LoWord & UINT16_MAX))
-            ;
-        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
-        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
-        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-        printf("Valor Total: %d\n", HX711Total);
-        printf("Valor Tara: %d\n", tare);
-        calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
-        printf("Valor Calibração: %.2f\n", calibration);
-        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-        ulp_onlyReadWeight = 0;
+        uint32_t HX711Total = readWeight(5);
+        if (HX711Total)
+        {
+            printf("Valor Total: %d\n", HX711Total);
+            printf("Valor Tara: %d\n", tare);
+            calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
+            printf("Valor Calibração: %.2f\n", calibration);
+        }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
     }
 }
@@ -155,31 +143,23 @@ void setUnitTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("Set Unit Task.\n");
-        ulp_onlyReadWeight = 1;
-        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
-        while (!(ulp_HX711LoWord & UINT16_MAX))
-            ;
-        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
-        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
-        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-        printf("Valor Total: %d\n", HX711Total);
-        unitWeight = (HX711Total - tare);
-        printf("Valor Unitário: %d\n", unitWeight);
-        float weightGrams = (float)unitWeight / calibration;
-        printf("Peso Unitário: %.2f g\n", weightGrams);
-        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-        ulp_onlyReadWeight = 0;
+        uint32_t HX711Total = readWeight(5);
+        if (HX711Total)
+        {
+            printf("Valor Total: %d\n", HX711Total);
+            unitWeight = (HX711Total - tare);
+            printf("Valor Unitário: %d\n", unitWeight);
+            float weightGrams = (float)unitWeight / calibration;
+            printf("Peso Unitário: %.2f g\n", weightGrams);
 
-        uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
-        // Acorda quando o valor medido é maior que o definido por Over
-        ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
-        ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
-        // Acorda quando o valor medido é menor que o definido por Under
-        ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
-        ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
-
+            uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+            // Acorda quando o valor medido é maior que o definido por Over
+            ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
+            ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
+            // Acorda quando o valor medido é menor que o definido por Under
+            ulp_trshHoldUnderADMSB = (tare - weightDifference) >> 16;
+            ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
+        }
         xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
     }
 }
@@ -239,27 +219,25 @@ void app_main(void)
     case ESP_SLEEP_WAKEUP_ULP:
     {
         printf("ULP wakeup\n");
-        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        // printf("Valor ADMSB: %d\n", HX711HiWord_ulp);
-        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        // printf("Valor ADLSB: %d\n", HX711LoWord_ulp);
-        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-        printf("Valor Total: %d\n", HX711Total);
-        uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
-        printf("Tipo threshold: %d\n", thresholdType_ulp);
-        float weightGrams = ((float)HX711Total - (float)tare) / calibration;
-        printf("Peso: %.2f g\n", weightGrams);
-        float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-        printf("Quantidade: %.2f\n", quantityUnits);
+        uint32_t HX711Total = readWeight(5);
+        if (HX711Total)
+        {
+            printf("Valor Total: %d\n", HX711Total);
+            uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
+            printf("Tipo threshold: %d\n", thresholdType_ulp);
+            float weightGrams = ((float)HX711Total - (float)tare) / calibration;
+            printf("Peso: %.2f g\n", weightGrams);
+            float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
+            printf("Quantidade: %.2f\n", quantityUnits);
 
-        uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
-        // Acorda quando o valor medido é maior que o definido por Over
-        ulp_trshHoldOverADMSB = (HX711Total + weightDifference) >> 16;
-        ulp_trshHoldOverADLSB = (HX711Total + weightDifference) & 0xFFFF;
-        // Acorda quando o valor medido é menor que o definido por Under
-        ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
-        ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
-
+            uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+            // Acorda quando o valor medido é maior que o definido por Over
+            ulp_trshHoldOverADMSB = (HX711Total + weightDifference) >> 16;
+            ulp_trshHoldOverADLSB = (HX711Total + weightDifference) & 0xFFFF;
+            // Acorda quando o valor medido é menor que o definido por Under
+            ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
+            ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
+        }
         break;
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
@@ -312,4 +290,35 @@ static void init_ulp_program(void)
     /* Start the program */
     err = ulp_run(&ulp_main - RTC_SLOW_MEM);
     ESP_ERROR_CHECK(err);
+}
+
+static uint32_t readWeight(int repeatRead)
+{
+    uint32_t accumulatedTotal = 0;
+
+    ulp_onlyReadWeight = 1;
+    ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
+
+    for (int count = 0; count < repeatRead; count++)
+    {
+        while (!(ulp_thresholdType & UINT16_MAX))
+            ;
+        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+        ulp_thresholdType = 0;
+        if (!HX711Total)
+        {
+            ulp_set_wakeup_period(0, ulpWakeUpPeriod);
+            ulp_onlyReadWeight = 0;
+            return 0;
+        }
+        accumulatedTotal += HX711Total;
+    }
+    accumulatedTotal = accumulatedTotal / repeatRead;
+
+    ulp_set_wakeup_period(0, ulpWakeUpPeriod);
+    ulp_onlyReadWeight = 0;
+
+    return accumulatedTotal;
 }
