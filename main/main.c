@@ -259,6 +259,17 @@ void app_main(void)
     {
         printf("Wake up from timer.\n");
         printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
+        uint32_t HX711Total = readWeight(5);
+        if (HX711Total)
+        {
+            printf("Valor Total: %d\n", HX711Total);
+            uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
+            printf("Tipo threshold: %d\n", thresholdType_ulp);
+            float weightGrams = ((float)HX711Total - (float)tare) / calibration;
+            printf("Peso: %.2f g\n", weightGrams);
+            float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
+            printf("Quantidade: %.2f\n", quantityUnits);
+        }
         quantityDifferenceAccumulate = 0;
         wakeup_time_sec = 0;
         break;
