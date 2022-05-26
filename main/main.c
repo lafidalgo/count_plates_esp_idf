@@ -402,7 +402,7 @@ static uint32_t readWeight(int repeatRead)
     ulp_enterSleepHX711 = 0;
     ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
 
-    for (int count = 0; count < repeatRead; count++)
+    for (int count = 0; count < (repeatRead - 1); count++)
     {
         while (!(ulp_thresholdType & UINT16_MAX))
             ;
@@ -419,7 +419,23 @@ static uint32_t readWeight(int repeatRead)
         }
         accumulatedTotal += HX711Total;
     }
+
     ulp_enterSleepHX711 = 1;
+    while (!(ulp_thresholdType & UINT16_MAX))
+        ;
+    uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+    uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+    uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+    ulp_thresholdType = 0;
+    if (!HX711Total)
+    {
+        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
+        ulp_onlyReadWeight = 0;
+        ulp_enterSleepHX711 = 1;
+        return 0;
+    }
+    accumulatedTotal += HX711Total;
+
     accumulatedTotal = accumulatedTotal / repeatRead;
 
     ulp_set_wakeup_period(0, ulpWakeUpPeriod);
