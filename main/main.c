@@ -12,6 +12,9 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#include <time.h>
+#include <sys/time.h>
+
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
 #include "soc/rtc_periph.h"
@@ -47,7 +50,8 @@ static RTC_DATA_ATTR float calibration = 1;
 static RTC_DATA_ATTR int32_t unitWeight = 1;
 static RTC_DATA_ATTR float lastQuantity = 0;
 static RTC_DATA_ATTR float quantityDifferenceAccumulate = 0;
-static RTC_DATA_ATTR int wakeup_time_sec = 60;
+static RTC_DATA_ATTR int wakeup_time_sec = 0;
+static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -92,10 +96,18 @@ void enterDeepSleepTask(void *pvParameters)
             pdTRUE,                /* Wait for both bits. */
             portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
 
-        // printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
         if (wakeup_time_sec)
         {
-            esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+            struct timeval now;
+            gettimeofday(&now, NULL);
+            int sleep_time_s = now.tv_sec - sleep_enter_time.tv_sec;
+            int remaining_wake_up = wakeup_time_sec - sleep_time_s;
+            if (remaining_wake_up < 0)
+            {
+                remaining_wake_up = 0;
+            }
+            printf("Wake up remaining time: %ds\n", remaining_wake_up);
+            esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
         }
 
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
@@ -278,7 +290,12 @@ void app_main(void)
             {
                 quantityDifference *= -1;
             }
+            if (!quantityDifferenceAccumulate)
+            {
+                gettimeofday(&sleep_enter_time, NULL);
+            }
             quantityDifferenceAccumulate += quantityDifference;
+            printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
 
             if (quantityDifferenceAccumulate <= UnitDifferenceLowPriority) // Até 1 de diferença
             {
