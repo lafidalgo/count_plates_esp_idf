@@ -31,7 +31,10 @@
 #define BIT_2 (1 << 2)
 
 #define weightReference 2000 // 2 kg
-#define maxUnitDifference 2
+#define maxUnitDifference 0
+#define UnitDifferenceLowPriority 1
+#define UnitDifferenceMediumPriority 2
+#define UnitDifferenceHighPriority 5
 #define measureSignalReference -1 // O valor diminuir quando aumenta o peso
 #define ulpWakeUpPeriod 1000000   // Em us (1 s)
 #define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
@@ -42,6 +45,9 @@ extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
 static RTC_DATA_ATTR uint32_t tare = 1;
 static RTC_DATA_ATTR float calibration = 1;
 static RTC_DATA_ATTR int32_t unitWeight = 1;
+static RTC_DATA_ATTR float lastQuantity = 0;
+static RTC_DATA_ATTR float quantityDifferenceAccumulate = 0;
+static RTC_DATA_ATTR int wakeup_time_sec = 60;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -86,9 +92,11 @@ void enterDeepSleepTask(void *pvParameters)
             pdTRUE,                /* Wait for both bits. */
             portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
 
-        const int wakeup_time_sec = 60;
         // printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-        esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+        if (wakeup_time_sec)
+        {
+            esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+        }
 
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
         const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
@@ -238,6 +246,9 @@ void app_main(void)
     case ESP_SLEEP_WAKEUP_TIMER:
     {
         printf("Wake up from timer.\n");
+        printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
+        quantityDifferenceAccumulate = 0;
+        wakeup_time_sec = 0;
         break;
     }
     case ESP_SLEEP_WAKEUP_ULP:
@@ -261,6 +272,32 @@ void app_main(void)
             // Acorda quando o valor medido é menor que o definido por Under
             ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
             ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
+
+            float quantityDifference = lastQuantity - quantityUnits;
+            if (quantityDifference < 0)
+            {
+                quantityDifference *= -1;
+            }
+            quantityDifferenceAccumulate += quantityDifference;
+
+            if (quantityDifferenceAccumulate <= UnitDifferenceLowPriority) // Até 1 de diferença
+            {
+                wakeup_time_sec = 90; // 15 min
+            }
+            else if (quantityDifferenceAccumulate <= UnitDifferenceMediumPriority) // De 1 a 2 de diferença
+            {
+                wakeup_time_sec = 60; // 10 min
+            }
+            else if (quantityDifferenceAccumulate <= UnitDifferenceHighPriority) // De 2 a 5 de diferença
+            {
+                wakeup_time_sec = 30; // 5 min
+            }
+            else if (quantityDifferenceAccumulate > UnitDifferenceHighPriority) // Maior que 5
+            {
+                wakeup_time_sec = 6; // 1 min
+            }
+
+            lastQuantity = quantityUnits;
         }
         break;
     }
