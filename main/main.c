@@ -34,7 +34,7 @@
 #define BIT_2 (1 << 2)
 
 #define weightReference 2000 // 2 kg
-#define maxUnitDifference 0
+#define minUnitDifference 0
 #define UnitDifferenceLowPriority 1
 #define UnitDifferenceMediumPriority 2
 #define UnitDifferenceHighPriority 5
@@ -188,7 +188,7 @@ void setUnitTask(void *pvParameters)
             printf("Peso Unitário: %.2f g\n", weightGrams);
             nvsWriteSigned("unitWeightValue", unitWeight);
 
-            uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+            uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
             ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
             ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
@@ -288,7 +288,7 @@ void app_main(void)
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
             printf("Quantidade: %.2f\n", quantityUnits);
 
-            uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+            uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
             ulp_trshHoldOverADMSB = (HX711Total + weightDifference) >> 16;
             ulp_trshHoldOverADLSB = (HX711Total + weightDifference) & 0xFFFF;
@@ -296,7 +296,7 @@ void app_main(void)
             ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
             ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
 
-            if (quantityDifferenceAccumulate <= 0.5 && quantityDifferenceAccumulate >= -0.5)
+            if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5) && quantityDifferenceAccumulate >= (-0.5 - minUnitDifference))
             {
                 gettimeofday(&sleep_enter_time, NULL);
             }
@@ -309,23 +309,23 @@ void app_main(void)
 
             printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
 
-            if (quantityDifferenceAccumulateMod <= 0.5) // Até 0.5 de diferença
+            if (quantityDifferenceAccumulateMod <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
             {
                 wakeup_time_sec = 0; // Não envia
             }
-            else if (quantityDifferenceAccumulateMod <= UnitDifferenceLowPriority) // Até 1 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceLowPriority)) // Até 1 de diferença
             {
                 wakeup_time_sec = 90; // 15 min
             }
-            else if (quantityDifferenceAccumulateMod <= UnitDifferenceMediumPriority) // De 1 a 2 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceMediumPriority)) // De 1 a 2 de diferença
             {
                 wakeup_time_sec = 60; // 10 min
             }
-            else if (quantityDifferenceAccumulateMod <= UnitDifferenceHighPriority) // De 2 a 5 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceHighPriority)) // De 2 a 5 de diferença
             {
                 wakeup_time_sec = 30; // 5 min
             }
-            else if (quantityDifferenceAccumulateMod > UnitDifferenceHighPriority) // Maior que 5
+            else if (quantityDifferenceAccumulateMod > (minUnitDifference + UnitDifferenceHighPriority)) // Maior que 5
             {
                 wakeup_time_sec = 6; // 1 min
             }
@@ -369,7 +369,7 @@ static void init_ulp_program(void)
     rtc_gpio_pullup_dis(gpio_num_adsk);
     rtc_gpio_hold_en(gpio_num_adsk);
 
-    uint32_t weightDifference = unitWeight * (maxUnitDifference + 0.5) * measureSignalReference;
+    uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
     // Acorda quando o valor medido é maior que o definido por Over
     ulp_trshHoldOverADMSB = (tare + weightDifference) >> 16;
     ulp_trshHoldOverADLSB = (tare + weightDifference) & 0xFFFF;
