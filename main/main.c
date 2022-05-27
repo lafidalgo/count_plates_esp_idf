@@ -119,7 +119,7 @@ void enterDeepSleepTask(void *pvParameters)
         // ESP_LOGI(TAG, "Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
         esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
-        ESP_LOGI(TAG, "Enabling ULP wakeup");
+        // ESP_LOGI(TAG, "Enabling ULP wakeup");
         ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
         /* Disconnect GPIO12 and GPIO15 to remove current drain through
