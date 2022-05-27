@@ -33,6 +33,10 @@
 #define BIT_1 (1 << 1)
 #define BIT_2 (1 << 2)
 
+const int TARE_BIT = BIT_0;
+const int CALIBRATE_BIT = BIT_1;
+const int SET_UNIT_BIT = BIT_2;
+
 #define weightReference 2000 // 2 kg
 #define minUnitDifference 0
 #define UnitDifferenceLowPriority 1
@@ -92,11 +96,11 @@ void enterDeepSleepTask(void *pvParameters)
     while (1)
     {
         xEventGroupWaitBits(
-            xEventGroupDeepSleep,  /* The event group being tested. */
-            BIT_0 | BIT_1 | BIT_2, /* The bits within the event group to wait for. */
-            pdTRUE,                /* BIT_0 & BIT_1 & BIT_2 should be cleared before returning. */
-            pdTRUE,                /* Wait for both bits. */
-            portMAX_DELAY);        /* Wait a maximum of 100ms for either bit to be set. */
+            xEventGroupDeepSleep,                    /* The event group being tested. */
+            TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT, /* The bits within the event group to wait for. */
+            pdTRUE,                                  /* BIT_0 & BIT_1 & BIT_2 should be cleared before returning. */
+            pdTRUE,                                  /* Wait for both bits. */
+            portMAX_DELAY);                          /* Wait a maximum of 100ms for either bit to be set. */
 
         if (wakeup_time_sec)
         {
@@ -150,7 +154,7 @@ void tareTask(void *pvParameters)
             nvsWriteUnsigned("tareValue", tare);
             blinkLED();
         }
-        xEventGroupSetBits(xEventGroupDeepSleep, BIT_0);
+        xEventGroupSetBits(xEventGroupDeepSleep, TARE_BIT);
     }
 }
 
@@ -170,7 +174,7 @@ void calibrateTask(void *pvParameters)
             nvsWriteSigned("calibrateValue", (calibration * 10000));
             blinkLED();
         }
-        xEventGroupSetBits(xEventGroupDeepSleep, BIT_1);
+        xEventGroupSetBits(xEventGroupDeepSleep, CALIBRATE_BIT);
     }
 }
 
@@ -199,7 +203,7 @@ void setUnitTask(void *pvParameters)
             ulp_trshHoldUnderADLSB = (tare - weightDifference) & 0xFFFF;
             blinkLED();
         }
-        xEventGroupSetBits(xEventGroupDeepSleep, BIT_2);
+        xEventGroupSetBits(xEventGroupDeepSleep, SET_UNIT_BIT);
     }
 }
 
@@ -212,7 +216,7 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "The event group was not created.");
     }
-    xEventGroupSetBits(xEventGroupDeepSleep, BIT_0 | BIT_1 | BIT_2);
+    xEventGroupSetBits(xEventGroupDeepSleep, TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT);
 
     /*Criação Tasks*/
     xTaskCreate(tareTask, "tareTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskTareHandle);
@@ -239,15 +243,15 @@ void app_main(void)
             switch (pin)
             {
             case ext_wakeup_pin_1:
-                xEventGroupClearBits(xEventGroupDeepSleep, BIT_0);
+                xEventGroupClearBits(xEventGroupDeepSleep, TARE_BIT);
                 xTaskNotifyGive(taskTareHandle);
                 break;
             case ext_wakeup_pin_2:
-                xEventGroupClearBits(xEventGroupDeepSleep, BIT_1);
+                xEventGroupClearBits(xEventGroupDeepSleep, CALIBRATE_BIT);
                 xTaskNotifyGive(taskCalibrateHandle);
                 break;
             case ext_wakeup_pin_3:
-                xEventGroupClearBits(xEventGroupDeepSleep, BIT_2);
+                xEventGroupClearBits(xEventGroupDeepSleep, SET_UNIT_BIT);
                 xTaskNotifyGive(taskSetUnitHandle);
                 break;
             }
