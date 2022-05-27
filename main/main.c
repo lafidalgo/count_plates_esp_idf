@@ -313,19 +313,19 @@ void app_main(void)
             {
                 wakeup_time_sec = 0; // Não envia
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceLowPriority)) // Até 1 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceLowPriority + 0.5)) // De 0.5 a 1.5 de diferença
             {
                 wakeup_time_sec = 90; // 15 min
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceMediumPriority)) // De 1 a 2 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceMediumPriority + 0.5)) // De 1.5 a 2.5 de diferença
             {
                 wakeup_time_sec = 60; // 10 min
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceHighPriority)) // De 2 a 5 de diferença
+            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // De 2.5 a 5.5 de diferença
             {
                 wakeup_time_sec = 30; // 5 min
             }
-            else if (quantityDifferenceAccumulateMod > (minUnitDifference + UnitDifferenceHighPriority)) // Maior que 5
+            else if (quantityDifferenceAccumulateMod > (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // Maior que 5.5
             {
                 wakeup_time_sec = 6; // 1 min
             }
