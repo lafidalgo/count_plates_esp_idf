@@ -57,6 +57,8 @@ const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
 const int ext_wakeup_pin_3 = 13;
 
+static const char *TAG = "App";
+
 gpio_num_t led_pin = GPIO_NUM_14;
 
 /*Variáveis para armazenamento do handle das tasks, queues, semaphores, timers e event groups*/
@@ -106,7 +108,7 @@ void enterDeepSleepTask(void *pvParameters)
             {
                 remaining_wake_up = 0;
             }
-            printf("Wake up remaining time: %ds\n", remaining_wake_up);
+            ESP_LOGI(TAG, "Wake up remaining time: %ds", remaining_wake_up);
             esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
         }
 
@@ -114,10 +116,10 @@ void enterDeepSleepTask(void *pvParameters)
         const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
         const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
 
-        // printf("Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d\n", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
+        // ESP_LOGI(TAG, "Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
         esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
-        // printf("Enabling ULP wakeup\n");
+        ESP_LOGI(TAG, "Enabling ULP wakeup");
         ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
         /* Disconnect GPIO12 and GPIO15 to remove current drain through
@@ -128,7 +130,7 @@ void enterDeepSleepTask(void *pvParameters)
         rtc_gpio_isolate(GPIO_NUM_15);
         esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 
-        printf("Entering deep sleep\n");
+        ESP_LOGI(TAG, "Entering deep sleep");
         esp_deep_sleep_start();
     }
 }
@@ -138,13 +140,13 @@ void tareTask(void *pvParameters)
     while (1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        printf("Tare Task.\n");
+        ESP_LOGI(TAG, "Tare Task.");
         uint32_t HX711Total = readWeight(5);
         if (HX711Total)
         {
-            printf("Valor Total: %d\n", HX711Total);
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
             tare = HX711Total;
-            printf("Valor Tara: %d\n", tare);
+            ESP_LOGI(TAG, "Valor Tara: %d", tare);
             nvsWriteUnsigned("tareValue", tare);
             blinkLED();
         }
@@ -157,14 +159,14 @@ void calibrateTask(void *pvParameters)
     while (1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        printf("Calibrate Task.\n");
+        ESP_LOGI(TAG, "Calibrate Task.");
         uint32_t HX711Total = readWeight(5);
         if (HX711Total)
         {
-            printf("Valor Total: %d\n", HX711Total);
-            printf("Valor Tara: %d\n", tare);
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
+            ESP_LOGI(TAG, "Valor Tara: %d", tare);
             calibration = ((float)HX711Total - (float)tare) / (float)weightReference;
-            printf("Valor Calibração: %.2f\n", calibration);
+            ESP_LOGI(TAG, "Valor Calibração: %.2f", calibration);
             nvsWriteSigned("calibrateValue", (calibration * 10000));
             blinkLED();
         }
@@ -177,15 +179,15 @@ void setUnitTask(void *pvParameters)
     while (1)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        printf("Set Unit Task.\n");
+        ESP_LOGI(TAG, "Set Unit Task.");
         uint32_t HX711Total = readWeight(5);
         if (HX711Total)
         {
-            printf("Valor Total: %d\n", HX711Total);
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
             unitWeight = (HX711Total - tare);
-            printf("Valor Unitário: %d\n", unitWeight);
+            ESP_LOGI(TAG, "Valor Unitário: %d", unitWeight);
             float weightGrams = (float)unitWeight / calibration;
-            printf("Peso Unitário: %.2f g\n", weightGrams);
+            ESP_LOGI(TAG, "Peso Unitário: %.2f g", weightGrams);
             nvsWriteSigned("unitWeightValue", unitWeight);
 
             uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
@@ -208,7 +210,7 @@ void app_main(void)
     xEventGroupDeepSleep = xEventGroupCreate();
     if (xEventGroupDeepSleep == NULL)
     {
-        printf("The event group was not created.");
+        ESP_LOGE(TAG, "The event group was not created.");
     }
     xEventGroupSetBits(xEventGroupDeepSleep, BIT_0 | BIT_1 | BIT_2);
 
@@ -232,7 +234,8 @@ void app_main(void)
         if (wakeup_pin_mask != 0)
         {
             int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-            printf("Wake up from GPIO %d\n", pin);
+            ESP_LOGI(TAG, "Wake up from GPIO %d", pin);
+
             switch (pin)
             {
             case ext_wakeup_pin_1:
@@ -251,24 +254,24 @@ void app_main(void)
         }
         else
         {
-            printf("Wake up from GPIO\n");
+            ESP_LOGI(TAG, "Wake up from GPIO");
         }
         break;
     }
     case ESP_SLEEP_WAKEUP_TIMER:
     {
-        printf("Wake up from timer.\n");
-        printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
+        ESP_LOGI(TAG, "Wake up from timer");
+        ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
         uint32_t HX711Total = readWeight(5);
         if (HX711Total)
         {
-            printf("Valor Total: %d\n", HX711Total);
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
             uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
-            printf("Tipo threshold: %d\n", thresholdType_ulp);
+            ESP_LOGI(TAG, "Tipo threshold: %d", thresholdType_ulp);
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
-            printf("Peso: %.2f g\n", weightGrams);
+            ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-            printf("Quantidade: %.2f\n", quantityUnits);
+            ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
         }
         quantityDifferenceAccumulate = 0;
         wakeup_time_sec = 0;
@@ -276,17 +279,17 @@ void app_main(void)
     }
     case ESP_SLEEP_WAKEUP_ULP:
     {
-        printf("ULP wakeup\n");
+        ESP_LOGI(TAG, "ULP wakeup");
         uint32_t HX711Total = readWeight(5);
         if (HX711Total)
         {
-            printf("Valor Total: %d\n", HX711Total);
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
             uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
-            printf("Tipo threshold: %d\n", thresholdType_ulp);
+            ESP_LOGI(TAG, "Tipo threshold: %d", thresholdType_ulp);
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
-            printf("Peso: %.2f g\n", weightGrams);
+            ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-            printf("Quantidade: %.2f\n", quantityUnits);
+            ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
 
             uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
@@ -307,7 +310,7 @@ void app_main(void)
                 quantityDifferenceAccumulateMod *= -1;
             }
 
-            printf("Diferença acumulada na quantidade: %.2f\n", quantityDifferenceAccumulate);
+            ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
 
             if (quantityDifferenceAccumulateMod <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
             {
@@ -336,7 +339,7 @@ void app_main(void)
     }
     case ESP_SLEEP_WAKEUP_UNDEFINED:
     default:
-        printf("Not a deep sleep reset, initializing ULP\n");
+        ESP_LOGI(TAG, "Not a deep sleep reset, initializing ULP");
         initVariablesFromNVS();
         init_ulp_program();
     }
@@ -462,14 +465,14 @@ void nvsWriteUnsigned(const char *key, uint32_t value)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
         return;
     }
 
     err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
         return;
     }
 
@@ -478,13 +481,13 @@ void nvsWriteUnsigned(const char *key, uint32_t value)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Erro ao gravar\n");
+        ESP_LOGE(TAG, "Erro ao gravar");
         nvs_close(handler_particao_nvs);
         return;
     }
     else
     {
-        printf("Dado gravado com sucesso!\n");
+        ESP_LOGI(TAG, "Dado gravado com sucesso!");
         nvs_commit(handler_particao_nvs);
         nvs_close(handler_particao_nvs);
     }
@@ -498,14 +501,14 @@ uint32_t nvsReadUnsigned(const char *key)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
         return 0;
     }
 
     err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
         return 0;
     }
 
@@ -514,13 +517,13 @@ uint32_t nvsReadUnsigned(const char *key)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao fazer leitura do dado\n");
+        ESP_LOGE(TAG, "Falha ao fazer leitura do dado");
         nvs_close(handler_particao_nvs);
         return 0;
     }
     else
     {
-        // printf("Dado lido com sucesso!\n");
+        // ESP_LOGI(TAG, "Dado lido com sucesso!");
         nvs_close(handler_particao_nvs);
         return value;
     }
@@ -533,14 +536,14 @@ void nvsWriteSigned(const char *key, int32_t value)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
         return;
     }
 
     err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
         return;
     }
 
@@ -549,13 +552,13 @@ void nvsWriteSigned(const char *key, int32_t value)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Erro ao gravar\n");
+        ESP_LOGE(TAG, "Erro ao gravar");
         nvs_close(handler_particao_nvs);
         return;
     }
     else
     {
-        printf("Dado gravado com sucesso!\n");
+        ESP_LOGI(TAG, "Dado gravado com sucesso!");
         nvs_commit(handler_particao_nvs);
         nvs_close(handler_particao_nvs);
     }
@@ -569,14 +572,14 @@ int32_t nvsReadSigned(const char *key)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao iniciar partição NVS.\n");
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
         return 0;
     }
 
     err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao abrir NVS como escrita/leitura\n");
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
         return 0;
     }
 
@@ -585,13 +588,13 @@ int32_t nvsReadSigned(const char *key)
 
     if (err != ESP_OK)
     {
-        printf("[ERRO] Falha ao fazer leitura do dado\n");
+        ESP_LOGE(TAG, "Falha ao fazer leitura do dado");
         nvs_close(handler_particao_nvs);
         return 0;
     }
     else
     {
-        // printf("Dado lido com sucesso!\n");
+        // ESP_LOGI(TAG, "Dado lido com sucesso!");
         nvs_close(handler_particao_nvs);
         return value;
     }
@@ -605,7 +608,7 @@ void initVariablesFromNVS(void)
         nvsWriteUnsigned("tareValue", 1);
         tare = nvsReadUnsigned("tareValue");
     }
-    printf("Valor Tara: %d\n", tare);
+    ESP_LOGI(TAG, "Valor Tara: %d", tare);
 
     calibration = ((float)nvsReadSigned("calibrateValue") / 10000);
     if (!calibration)
@@ -613,7 +616,7 @@ void initVariablesFromNVS(void)
         nvsWriteSigned("calibrateValue", 1);
         calibration = ((float)nvsReadSigned("calibrateValue") / 10000);
     }
-    printf("Valor Calibração: %.2f\n", calibration);
+    ESP_LOGI(TAG, "Valor Calibração: %.2f", calibration);
 
     unitWeight = nvsReadSigned("unitWeightValue");
     if (!unitWeight)
@@ -621,5 +624,5 @@ void initVariablesFromNVS(void)
         nvsWriteSigned("unitWeightValue", 1);
         unitWeight = nvsReadSigned("unitWeightValue");
     }
-    printf("Valor Unitário: %d\n", unitWeight);
+    ESP_LOGI(TAG, "Valor Unitário: %d", unitWeight);
 }
