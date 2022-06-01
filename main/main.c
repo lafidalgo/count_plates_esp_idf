@@ -303,36 +303,37 @@ void app_main(void)
             ulp_trshHoldUnderADMSB = (HX711Total - weightDifference) >> 16;
             ulp_trshHoldUnderADLSB = (HX711Total - weightDifference) & 0xFFFF;
 
-            if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5) && quantityDifferenceAccumulate >= (-0.5 - minUnitDifference))
+            if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5))
             {
                 gettimeofday(&sleep_enter_time, NULL);
             }
-            quantityDifferenceAccumulate += (quantityUnits - lastQuantity);
-            float quantityDifferenceAccumulateMod = quantityDifferenceAccumulate;
-            if (quantityDifferenceAccumulateMod < 0)
+            
+            float quantityDifference = (quantityUnits - lastQuantity);
+            if (quantityDifference < 0)
             {
-                quantityDifferenceAccumulateMod *= -1;
+                quantityDifference *= -1;
             }
+            quantityDifferenceAccumulate += quantityDifference;
 
             ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
 
-            if (quantityDifferenceAccumulateMod <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
+            if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
             {
                 wakeup_time_sec = 0; // Não envia
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceLowPriority + 0.5)) // De 0.5 a 1.5 de diferença
+            else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceLowPriority + 0.5)) // De 0.5 a 1.5 de diferença
             {
                 wakeup_time_sec = 90; // 15 min
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceMediumPriority + 0.5)) // De 1.5 a 2.5 de diferença
+            else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceMediumPriority + 0.5)) // De 1.5 a 2.5 de diferença
             {
                 wakeup_time_sec = 60; // 10 min
             }
-            else if (quantityDifferenceAccumulateMod <= (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // De 2.5 a 5.5 de diferença
+            else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // De 2.5 a 5.5 de diferença
             {
                 wakeup_time_sec = 30; // 5 min
             }
-            else if (quantityDifferenceAccumulateMod > (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // Maior que 5.5
+            else if (quantityDifferenceAccumulate > (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // Maior que 5.5
             {
                 wakeup_time_sec = 6; // 1 min
             }
