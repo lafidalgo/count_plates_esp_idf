@@ -29,16 +29,32 @@ trshHoldUnderADMSB:
 trshHoldUnderADLSB:
 .long 0x00
 
-.global thresholdType
-thresholdType:
+.global dataReady
+dataReady:
 .long 0x00
 
-.global onlyReadWeight
-onlyReadWeight:
+.global repeatMeasureCount
+repeatMeasureCount:
 .long 0x00
 
-.global enterSleepHX711
-enterSleepHX711:
+.global repeatMeasureQuantity
+repeatMeasureQuantity:
+.long 0x00
+
+.global setRepeatMeasure
+setRepeatMeasure:
+.long 0x00
+
+.global wakeUp
+wakeUp:
+.long 0x00
+
+.global HX711HiWordAcc
+HX711HiWordAcc:
+.long 0x00
+
+.global HX711LoWordAcc
+HX711LoWordAcc:
 .long 0x00
 
 .bss//Variaveis sao declaradas dentro da secao .bss
@@ -61,19 +77,19 @@ enterSleepHX711:
 
 	.global main
 	main://O codigo e iniciado aqui, equivale ao void setup()
-		move r3, thresholdType
-		move r0, 0x00
-		st r0, r3, 0
+		move 	r3, dataReady
+		move 	r0, 0x00
+		st 		r0, r3, 0
 		WRITE_RTC_REG(RTC_GPIO_OUT_W1TS_REG, RTC_GPIO_OUT_DATA_W1TS_S+6, 1, 1)//sobe add0
 
  	ReadHX711:
-    move    r1, 0           // Initialzation HX711 read storage to 0
-    move    r3, HX711HiWord
-    st      r1, r3, 0       // Offset points to HX711HiWord
-    st      r1, r3, 4       // Offset points to HX711LoWord
-    move    r2, 2           // count of passes through bit clocking code
-    stage_rst
-    stage_inc   8           // Setup to read hi 8 bits HX711 output
+		move    r1, 0           // Initialzation HX711 read storage to 0
+		move    r3, HX711HiWord
+		st      r1, r3, 0       // Offset points to HX711HiWord
+		st      r1, r3, 4       // Offset points to HX711LoWord
+		move    r2, 2           // count of passes through bit clocking code
+		stage_rst
+		stage_inc   8           // Setup to read hi 8 bits HX711 output
 	ReadCycleBegin:
 		SCLK_low
 	CheckReady:
@@ -101,64 +117,147 @@ enterSleepHX711:
 	ReadDone:                   // must cycle SCLK one more time to set gain to
 		SCLK_high               // 128 on next HX711 read, then leave SCLK hi for
 		SCLK_low                // for > 60 uS to power down HX711, ~10 clocks
-		move r0, enterSleepHX711
-		ld r0, r0, 0
-		jumpr check_onlyReadWeight, 1, LT // jump to label if R0 < 1
-		SCLK_high
-	
-	check_onlyReadWeight:
-		move r0, onlyReadWeight
-		ld r0, r0, 0
-		jumpr only_read_weight, 1, GE // jump to label if R0 >= 1
+		move 	r0, setRepeatMeasure
+		ld 		r0, r0, 0
+		jumpr 	check_set_repeat_measure, 1, GE // jump to label if R0 >= 1
+		move 	r0, repeatMeasureCount
+		ld 		r0, r0, 0
+		jumpr 	check_measure_high, 1, GT // jump to label if R0 > 1
+		jump 	compare_trshHoldOver
 
 	compare_trshHoldOver:
-		move r3, thresholdType
-		move r0, 0x01
-		st r0, r3, 0
-		move r2, trshHoldOverADMSB
-		ld r2, r2, 0
-		move r3, HX711HiWord
-		ld r3, r3, 0
-		sub r0, r2, r3
-		jumpr msb_igual_over, 0, eq
-		jump wake_up, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
+		move 	r2, trshHoldOverADMSB
+		ld 		r2, r2, 0
+		move 	r3, HX711HiWord
+		ld 		r3, r3, 0
+		sub 	r0, r2, r3
+		jumpr 	msb_igual_over, 0, eq
+		jump 	set_repeat_measure, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
 		// msb ad menor q threshhold
-		jump compare_trshHoldUnder
+		jump 	compare_trshHoldUnder
 
 	msb_igual_over:
-		move r2, trshHoldOverADLSB
-		ld r2, r2, 0
-		move r3, HX711LoWord
-		ld r3, r3, 0
-		sub r0, r2, r3
-		jump wake_up, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
-		jump compare_trshHoldUnder
+		move 	r2, trshHoldOverADLSB
+		ld 		r2, r2, 0
+		move 	r3, HX711LoWord
+		ld 		r3, r3, 0
+		sub 	r0, r2, r3
+		jump 	set_repeat_measure, ov // overflow significa que r3 > r2 portanto vloadAD > threshHold
+		jump 	compare_trshHoldUnder
 
 	compare_trshHoldUnder:
-		move r3, thresholdType
-		move r0, 0x02
-		st r0, r3, 0
-		move r2, trshHoldUnderADMSB
-		ld r2, r2, 0
-		move r3, HX711HiWord
-		ld r3, r3, 0
-		sub r0, r3, r2
-		jumpr msb_igual_under, 0, eq
-		jump wake_up, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		move 	r2, trshHoldUnderADMSB
+		ld 		r2, r2, 0
+		move 	r3, HX711HiWord
+		ld 		r3, r3, 0
+		sub 	r0, r3, r2
+		jumpr 	msb_igual_under, 0, eq
+		jump 	set_repeat_measure, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
 		// msb ad menor q threshhold
+		SCLK_high
 		halt
 
 	msb_igual_under:
-		move r2, trshHoldUnderADLSB
-		ld r2, r2, 0
-		move r3, HX711LoWord
-		ld r3, r3, 0
-		sub r0, r3, r2
-		jump wake_up, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		move 	r2, trshHoldUnderADLSB
+		ld 		r2, r2, 0
+		move 	r3, HX711LoWord
+		ld 		r3, r3, 0
+		sub 	r0, r3, r2
+		jump 	set_repeat_measure, ov // overflow significa que r3 > r2 portanto threshHold > vloadAD
+		SCLK_high
 		halt
+	
+	check_set_repeat_measure:
+		move 	r3, setRepeatMeasure
+		move 	r0, 0x00
+		st 		r0, r3, 0
+		move 	r3, wakeUp
+		move 	r0, 0x00
+		st 		r0, r3, 0
+		jump set_repeat_measure
 
-	only_read_weight:
-		move r3, thresholdType
-		move r0, 0x03
-		st r0, r3, 0
+	set_repeat_measure:
+		move 	r3, repeatMeasureCount
+		move 	r0, repeatMeasureQuantity
+		ld 		r0, r0, 0
+		st 		r0, r3, 0
+		move 	r3, HX711LoWordAcc
+		move 	r0, 0x00
+		st		r0, r3, 0
+		move 	r3, HX711HiWordAcc
+		move 	r0, 0x00
+		st 		r0, r3, 0
+		jump 	check_measure_high
+
+	check_measure_high:
+		move 	r0, HX711HiWord
+		ld 		r0, r0, 0
+		jumpr 	check_measure_low, 0, eq
+		jump 	accumulate_measure
+	
+	check_measure_low:
+		move 	r0, HX711LoWord
+		ld 		r0, r0, 0
+		jumpr 	ReadHX711, 0, eq
+		jump	accumulate_measure
+
+	accumulate_measure:
+		move 	r3, repeatMeasureCount
+		ld 		r3, r3, 0
+		sub 	r0, r3, 1
+		move 	r3, repeatMeasureCount
+		st 		r0, r3, 0
+		move 	r3, HX711LoWordAcc
+		ld 		r3, r3, 0
+		move 	r2, HX711LoWord
+		ld 		r2, r2, 0
+		add 	r0, r3, r2
+		jump 	accumulate_overflow, ov // overflow significa que r3 + r2 ultrapassa 16 bits
+		move 	r3, HX711LoWordAcc
+		st 		r0, r3, 0
+		move 	r3, HX711HiWordAcc
+		ld 		r3, r3, 0
+		move 	r2, HX711HiWord
+		ld 		r2, r2, 0
+		add 	r0, r3, r2
+		move 	r3, HX711HiWordAcc
+		st 		r0, r3, 0
+		move 	r0, repeatMeasureCount
+		ld 		r0, r0, 0
+		jumpr 	finished_acc, 1, EQ // jump to label if R0 == 1
+		jump 	ReadHX711
+	
+	accumulate_overflow:
+		move 	r3, HX711LoWordAcc
+		st 		r0, r3, 0
+		move 	r3, HX711HiWordAcc
+		ld 		r3, r3, 0
+		move 	r2, HX711HiWord
+		ld 		r2, r2, 0
+		add 	r0, r3, r2
+		add 	r0, r3, 1
+		move 	r3, HX711HiWordAcc
+		st 		r0, r3, 0
+		move 	r0, repeatMeasureCount
+		ld 		r0, r0, 0
+		jumpr 	finished_acc, 1, EQ // jump to label if R0 == 1
+		jump 	ReadHX711
+
+	finished_acc:
+		move 	r3, dataReady
+		move 	r0, 0x01
+		st 		r0, r3, 0
+		SCLK_high
+		move 	r3, repeatMeasureCount
+		move 	r0, 0x00
+		st 		r0, r3, 0
+		move 	r0, wakeUp
+		ld 		r0, r0, 0
+		jumpr 	no_wake_up, 0, EQ // jump to label if R0 == 0
+		jump 	wake_up
+	
+	no_wake_up:
+		move 	r3, wakeUp
+		move 	r0, 0x01
+		st 		r0, r3, 0
 		halt

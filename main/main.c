@@ -44,7 +44,8 @@ const int SET_UNIT_BIT = BIT_2;
 #define UnitDifferenceHighPriority 5
 #define measureSignalReference -1 // O valor diminuir quando aumenta o peso
 #define ulpWakeUpPeriod 1000000   // Em us (1 s)
-#define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
+
+#define repeatMeasureQuantity 5
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -76,7 +77,7 @@ EventGroupHandle_t xEventGroupDeepSleep;
 //******************** FUNCTIONS ********************
 static void init_ulp_program(void);
 
-static uint32_t readWeight(int repeatRead);
+static uint32_t readWeight(void);
 
 static void blinkLED(void);
 
@@ -145,7 +146,8 @@ void tareTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Tare Task.");
-        uint32_t HX711Total = readWeight(5);
+        ulp_setRepeatMeasure = 1;
+        uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
@@ -164,7 +166,8 @@ void calibrateTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Calibrate Task.");
-        uint32_t HX711Total = readWeight(5);
+        ulp_setRepeatMeasure = 1;
+        uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
@@ -184,7 +187,8 @@ void setUnitTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Set Unit Task.");
-        uint32_t HX711Total = readWeight(5);
+        ulp_setRepeatMeasure = 1;
+        uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
@@ -266,12 +270,11 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "Wake up from timer");
         ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
-        uint32_t HX711Total = readWeight(5);
+        ulp_setRepeatMeasure = 1;
+        uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
-            uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
-            ESP_LOGI(TAG, "Tipo threshold: %d", thresholdType_ulp);
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
             ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
@@ -284,12 +287,10 @@ void app_main(void)
     case ESP_SLEEP_WAKEUP_ULP:
     {
         ESP_LOGI(TAG, "ULP wakeup");
-        uint32_t HX711Total = readWeight(5);
+        uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
-            uint32_t thresholdType_ulp = (ulp_thresholdType & UINT16_MAX);
-            ESP_LOGI(TAG, "Tipo threshold: %d", thresholdType_ulp);
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
             ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
@@ -307,7 +308,7 @@ void app_main(void)
             {
                 gettimeofday(&sleep_enter_time, NULL);
             }
-            
+
             float quantityDifference = (quantityUnits - lastQuantity);
             if (quantityDifference < 0)
             {
@@ -392,8 +393,9 @@ static void init_ulp_program(void)
     ulp_trshHoldUnderADMSB = 208;
     ulp_trshHoldUnderADLSB = 60000;*/
     // Seta se quiser só ler peso, limpa se quiser fazer a comparação
-    ulp_onlyReadWeight = 0;
-    ulp_enterSleepHX711 = 1;
+    ulp_repeatMeasureCount = 0;
+    ulp_repeatMeasureQuantity = repeatMeasureQuantity + 1;
+    ulp_wakeUp = 1;
 
     ulp_set_wakeup_period(0, ulpWakeUpPeriod); // Set ULP wake up period T = 1s
 
@@ -402,54 +404,16 @@ static void init_ulp_program(void)
     ESP_ERROR_CHECK(err);
 }
 
-static uint32_t readWeight(int repeatRead)
+static uint32_t readWeight(void)
 {
-    uint32_t accumulatedTotal = 0;
-
-    ulp_onlyReadWeight = 1;
-    ulp_enterSleepHX711 = 0;
-    ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
-
-    for (int count = 0; count < (repeatRead - 1); count++)
-    {
-        while (!(ulp_thresholdType & UINT16_MAX))
-            ;
-        uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-        uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-        uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-        ulp_thresholdType = 0;
-        if (!HX711Total)
-        {
-            ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-            ulp_onlyReadWeight = 0;
-            ulp_enterSleepHX711 = 1;
-            return 0;
-        }
-        accumulatedTotal += HX711Total;
-    }
-
-    ulp_enterSleepHX711 = 1;
-    while (!(ulp_thresholdType & UINT16_MAX))
+    while (!(ulp_dataReady & UINT16_MAX))
         ;
-    uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
-    uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-    uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
-    ulp_thresholdType = 0;
-    if (!HX711Total)
-    {
-        ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-        ulp_onlyReadWeight = 0;
-        ulp_enterSleepHX711 = 1;
-        return 0;
-    }
-    accumulatedTotal += HX711Total;
+    uint32_t HX711HiWordAcc_ulp = (ulp_HX711HiWordAcc & UINT16_MAX);
+    uint32_t HX711LoWordAcc_ulp = (ulp_HX711LoWordAcc & UINT16_MAX);
+    uint32_t HX711TotalAcc = (HX711HiWordAcc_ulp << 16) + HX711LoWordAcc_ulp;
+    HX711TotalAcc /= repeatMeasureQuantity;
 
-    accumulatedTotal = accumulatedTotal / repeatRead;
-
-    ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-    ulp_onlyReadWeight = 0;
-
-    return accumulatedTotal;
+    return HX711TotalAcc;
 }
 
 void blinkLED(void)
