@@ -190,7 +190,6 @@ HX711LoWordAcc:
 		jump 	check_measure_high		// Jump p/ check_measure_high
 
 	check_measure_high:
-		jump accumulate_measure
 		move 	r0, HX711HiWord 		// Jump p/ check_measure_low se HX711HiWord == 0
 		ld 		r0, r0, 0				//
 		jumpr 	check_measure_low, 0, eq//
