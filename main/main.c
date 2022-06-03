@@ -43,7 +43,8 @@ const int SET_UNIT_BIT = BIT_2;
 #define UnitDifferenceMediumPriority 2
 #define UnitDifferenceHighPriority 5
 #define measureSignalReference -1 // O valor diminuir quando aumenta o peso
-#define ulpWakeUpPeriod 1000000   // Em us (1 s)
+#define ulpWakeUpPeriod 10000000  // Em us (10 s)
+#define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
 
 #define repeatMeasureQuantity 5
 
@@ -54,6 +55,7 @@ static RTC_DATA_ATTR uint32_t tare = 1;
 static RTC_DATA_ATTR float calibration = 1;
 static RTC_DATA_ATTR int32_t unitWeight = 1;
 static RTC_DATA_ATTR float lastQuantity = 0;
+static RTC_DATA_ATTR uint32_t lastHX711Total = 0;
 static RTC_DATA_ATTR float quantityDifferenceAccumulate = 0;
 static RTC_DATA_ATTR int wakeup_time_sec = 0;
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
@@ -147,6 +149,7 @@ void tareTask(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Tare Task.");
         ulp_setRepeatMeasure = 1;
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
@@ -167,6 +170,7 @@ void calibrateTask(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Calibrate Task.");
         ulp_setRepeatMeasure = 1;
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
@@ -188,6 +192,7 @@ void setUnitTask(void *pvParameters)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Set Unit Task.");
         ulp_setRepeatMeasure = 1;
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
         if (HX711Total)
         {
@@ -270,8 +275,7 @@ void app_main(void)
     {
         ESP_LOGI(TAG, "Wake up from timer");
         ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
-        ulp_setRepeatMeasure = 1;
-        uint32_t HX711Total = readWeight();
+        uint32_t HX711Total = lastHX711Total;
         if (HX711Total)
         {
             ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
@@ -340,6 +344,7 @@ void app_main(void)
             }
 
             lastQuantity = quantityUnits;
+            lastHX711Total = HX711Total;
         }
         break;
     }
@@ -408,12 +413,16 @@ static uint32_t readWeight(void)
 {
     while (!(ulp_dataReady & UINT16_MAX))
         ;
+    ulp_set_wakeup_period(0, ulpWakeUpPeriod);
+    uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+    uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
+    uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
     uint32_t HX711HiWordAcc_ulp = (ulp_HX711HiWordAcc & UINT16_MAX);
     uint32_t HX711LoWordAcc_ulp = (ulp_HX711LoWordAcc & UINT16_MAX);
     uint32_t HX711TotalAcc = (HX711HiWordAcc_ulp << 16) + HX711LoWordAcc_ulp;
     HX711TotalAcc /= repeatMeasureQuantity;
 
-    return HX711TotalAcc;
+    return HX711Total;
 }
 
 void blinkLED(void)
