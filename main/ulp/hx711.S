@@ -114,16 +114,16 @@ HX711LoWordAcc:
 		move    r1, 0           // init r1 for low word read (Is this needed? Be safe)
 		jump    RdBit
 	
-	ReadDone:                   // must cycle SCLK one more time to set gain to
-		SCLK_high               // 128 on next HX711 read, then leave SCLK hi for
-		SCLK_low                // for > 60 uS to power down HX711, ~10 clocks
-		move 	r0, setRepeatMeasure
-		ld 		r0, r0, 0
-		jumpr 	check_set_repeat_measure, 1, GE // jump to label if R0 >= 1
-		move 	r0, repeatMeasureCount
-		ld 		r0, r0, 0
-		jumpr 	check_measure_high, 1, GT // jump to label if R0 > 1
-		jump 	compare_trshHoldOver
+	ReadDone:                   				// must cycle SCLK one more time to set gain to
+		SCLK_high               				// 128 on next HX711 read, then leave SCLK hi for
+		SCLK_low                				// for > 60 uS to power down HX711, ~10 clocks
+		move 	r0, setRepeatMeasure			// Jump p/ check_set_repeat_measure se setRepeatMeasure == 1
+		ld 		r0, r0, 0						//
+		jumpr 	check_set_repeat_measure, 1, EQ // 
+		move 	r0, repeatMeasureCount			// Jump p/ check_measure_high se repeatMeasureCount > 1
+		ld 		r0, r0, 0						//
+		jumpr 	check_measure_high, 1, GT 		// 
+		jump 	compare_trshHoldOver			// Jump p/ compare_trshHoldOver
 
 	compare_trshHoldOver:
 		move 	r2, trshHoldOverADMSB
@@ -168,96 +168,97 @@ HX711LoWordAcc:
 		halt
 	
 	check_set_repeat_measure:
-		move 	r3, setRepeatMeasure
-		move 	r0, 0x00
-		st 		r0, r3, 0
-		move 	r3, wakeUp
-		move 	r0, 0x00
-		st 		r0, r3, 0
-		jump set_repeat_measure
+		move 	r3, setRepeatMeasure	// setRepeatMeasure = 0
+		move 	r0, 0x00				//
+		st 		r0, r3, 0				//
+		move 	r3, wakeUp				// wakeUp = 0
+		move 	r0, 0x00				//
+		st 		r0, r3, 0				//
+		jump set_repeat_measure			// Jump p/ set_repeat_measure
 
 	set_repeat_measure:
-		move 	r3, repeatMeasureCount
-		move 	r0, repeatMeasureQuantity
-		ld 		r0, r0, 0
-		st 		r0, r3, 0
-		move 	r3, HX711LoWordAcc
-		move 	r0, 0x00
-		st		r0, r3, 0
-		move 	r3, HX711HiWordAcc
-		move 	r0, 0x00
-		st 		r0, r3, 0
-		jump 	check_measure_high
+		move 	r3, repeatMeasureCount	// repeatMeasureCount = repeatMeasureQuantity
+		move 	r0, repeatMeasureQuantity//
+		ld 		r0, r0, 0				//
+		st 		r0, r3, 0				//
+		move 	r3, HX711LoWordAcc		// HX711LoWordAcc = 0
+		move 	r0, 0x00				//
+		st		r0, r3, 0				//
+		move 	r3, HX711HiWordAcc		// HX711HiWordAcc = 0
+		move 	r0, 0x00				//
+		st 		r0, r3, 0				//
+		jump 	check_measure_high		// Jump p/ check_measure_high
 
 	check_measure_high:
-		move 	r0, HX711HiWord
-		ld 		r0, r0, 0
-		jumpr 	check_measure_low, 0, eq
-		jump 	accumulate_measure
+		jump accumulate_measure
+		move 	r0, HX711HiWord 		// Jump p/ check_measure_low se HX711HiWord == 0
+		ld 		r0, r0, 0				//
+		jumpr 	check_measure_low, 0, eq//
+		jump 	accumulate_measure		// Jump p/ accumulate_measure se HX711HiWord != 0
 	
 	check_measure_low:
-		move 	r0, HX711LoWord
-		ld 		r0, r0, 0
-		jumpr 	ReadHX711, 0, eq
-		jump	accumulate_measure
+		move 	r0, HX711LoWord			// Jump p/ ReadHX711 se HX711LoWord == 0
+		ld 		r0, r0, 0				//
+		jumpr 	ReadHX711, 0, eq		//
+		jump	accumulate_measure		// Jump p/ accumulate_measure se HX711LoWord != 0
 
 	accumulate_measure:
-		move 	r3, repeatMeasureCount
-		ld 		r3, r3, 0
-		sub 	r0, r3, 1
-		move 	r3, repeatMeasureCount
-		st 		r0, r3, 0
-		move 	r3, HX711LoWordAcc
-		ld 		r3, r3, 0
-		move 	r2, HX711LoWord
-		ld 		r2, r2, 0
-		add 	r0, r3, r2
-		jump 	accumulate_overflow, ov // overflow significa que r3 + r2 ultrapassa 16 bits
-		move 	r3, HX711LoWordAcc
-		st 		r0, r3, 0
-		move 	r3, HX711HiWordAcc
-		ld 		r3, r3, 0
-		move 	r2, HX711HiWord
-		ld 		r2, r2, 0
-		add 	r0, r3, r2
-		move 	r3, HX711HiWordAcc
-		st 		r0, r3, 0
-		move 	r0, repeatMeasureCount
-		ld 		r0, r0, 0
-		jumpr 	finished_acc, 1, EQ // jump to label if R0 == 1
-		jump 	ReadHX711
+		move 	r3, repeatMeasureCount 	// repeatMeasureCount -= 1
+		ld 		r3, r3, 0				//
+		sub 	r0, r3, 1				//
+		move 	r3, repeatMeasureCount	//
+		st 		r0, r3, 0				//
+		move 	r3, HX711LoWordAcc      // HX711LoWordAcc + HX711LoWord
+		ld 		r3, r3, 0				//
+		move 	r2, HX711LoWord			//
+		ld 		r2, r2, 0				//
+		add 	r0, r3, r2				//
+		jump 	accumulate_overflow, ov // Jump p/ accumulate_overflow se HX711LoWordAcc + HX711LoWord ultrapassa 16 bits
+		move 	r3, HX711LoWordAcc     	// HX711LoWordAcc = HX711LoWordAcc + HX711LoWord
+		st 		r0, r3, 0				//
+		move 	r3, HX711HiWordAcc		// HX711HiWordAcc += HX711HiWord
+		ld 		r3, r3, 0				//
+		move 	r2, HX711HiWord			//
+		ld 		r2, r2, 0				//
+		add 	r0, r3, r2				//
+		move 	r3, HX711HiWordAcc		//
+		st 		r0, r3, 0				//
+		move 	r0, repeatMeasureCount	// Jump p/ finished_acc se repeatMeasureCount == 1
+		ld 		r0, r0, 0				//
+		jumpr 	finished_acc, 1, EQ 	// 
+		jump 	ReadHX711				// Jump p/ ReadHX711 se repeatMeasureCount != 1
 	
 	accumulate_overflow:
-		move 	r3, HX711LoWordAcc
-		st 		r0, r3, 0
-		move 	r3, HX711HiWordAcc
-		ld 		r3, r3, 0
-		move 	r2, HX711HiWord
-		ld 		r2, r2, 0
-		add 	r0, r3, r2
-		add 	r0, r3, 1
-		move 	r3, HX711HiWordAcc
-		st 		r0, r3, 0
-		move 	r0, repeatMeasureCount
-		ld 		r0, r0, 0
-		jumpr 	finished_acc, 1, EQ // jump to label if R0 == 1
-		jump 	ReadHX711
+		move 	r3, HX711LoWordAcc		// HX711LoWordAcc = HX711LoWordAcc + HX711LoWord
+		st 		r0, r3, 0				//
+		move 	r3, HX711HiWordAcc		// HX711HiWordAcc += (HX711HiWord + 1)
+		ld 		r3, r3, 0				//
+		move 	r2, HX711HiWord			//
+		ld 		r2, r2, 0				//
+		add 	r0, r3, r2				//
+		add 	r0, r0, 1				//
+		move 	r3, HX711HiWordAcc		//
+		st 		r0, r3, 0				//
+		move 	r0, repeatMeasureCount	// Jump p/ finished_acc se repeatMeasureCount == 1
+		ld 		r0, r0, 0				//
+		jumpr 	finished_acc, 1, EQ 	//
+		jump 	ReadHX711				// Jump p/ ReadHX711 se repeatMeasureCount != 1
 
 	finished_acc:
-		move 	r3, dataReady
-		move 	r0, 0x01
-		st 		r0, r3, 0
+		move 	r3, dataReady			// dataReady = 1
+		move 	r0, 0x01				//
+		st 		r0, r3, 0				//
 		SCLK_high
-		move 	r3, repeatMeasureCount
-		move 	r0, 0x00
-		st 		r0, r3, 0
-		move 	r0, wakeUp
-		ld 		r0, r0, 0
-		jumpr 	no_wake_up, 0, EQ // jump to label if R0 == 0
-		jump 	wake_up
+		move 	r3, repeatMeasureCount	// repeatMeasureCount = 0
+		move 	r0, 0x00				//
+		st 		r0, r3, 0				//
+		move 	r0, wakeUp				// Jump p/ no_wake_up se wakeUp == 0
+		ld 		r0, r0, 0				//
+		jumpr 	no_wake_up, 0, EQ 		//
+		jump 	wake_up					// Jump p/ wake_up se wakeUp != 0
 	
 	no_wake_up:
-		move 	r3, wakeUp
-		move 	r0, 0x01
-		st 		r0, r3, 0
-		halt
+		move 	r3, wakeUp				// wakeUp = 1
+		move 	r0, 0x01				//
+		st 		r0, r3, 0				//
+		halt							// Finaliza programa

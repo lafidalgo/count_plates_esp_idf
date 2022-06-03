@@ -43,7 +43,7 @@ const int SET_UNIT_BIT = BIT_2;
 #define UnitDifferenceMediumPriority 2
 #define UnitDifferenceHighPriority 5
 #define measureSignalReference -1 // O valor diminuir quando aumenta o peso
-#define ulpWakeUpPeriod 10000000  // Em us (10 s)
+#define ulpWakeUpPeriod 1000000   // Em us (1 s)
 #define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
 
 #define repeatMeasureQuantity 5
@@ -400,6 +400,7 @@ static void init_ulp_program(void)
     // Seta se quiser só ler peso, limpa se quiser fazer a comparação
     ulp_repeatMeasureCount = 0;
     ulp_repeatMeasureQuantity = repeatMeasureQuantity + 1;
+    ulp_setRepeatMeasure = 0;
     ulp_wakeUp = 1;
 
     ulp_set_wakeup_period(0, ulpWakeUpPeriod); // Set ULP wake up period T = 1s
@@ -414,15 +415,17 @@ static uint32_t readWeight(void)
     while (!(ulp_dataReady & UINT16_MAX))
         ;
     ulp_set_wakeup_period(0, ulpWakeUpPeriod);
-    uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
+
+    /*uint32_t HX711HiWord_ulp = (ulp_HX711HiWord & UINT16_MAX);
     uint32_t HX711LoWord_ulp = (ulp_HX711LoWord & UINT16_MAX);
-    uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;
+    uint32_t HX711Total = (HX711HiWord_ulp << 16) + HX711LoWord_ulp;*/
+
     uint32_t HX711HiWordAcc_ulp = (ulp_HX711HiWordAcc & UINT16_MAX);
     uint32_t HX711LoWordAcc_ulp = (ulp_HX711LoWordAcc & UINT16_MAX);
     uint32_t HX711TotalAcc = (HX711HiWordAcc_ulp << 16) + HX711LoWordAcc_ulp;
     HX711TotalAcc /= repeatMeasureQuantity;
 
-    return HX711Total;
+    return HX711TotalAcc;
 }
 
 void blinkLED(void)
