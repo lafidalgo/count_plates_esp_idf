@@ -1,6 +1,6 @@
 idf_component_register(SRCS "main.c"
                     INCLUDE_DIRS ""
-                    REQUIRES driver soc nvs_flash ulp)
+                    REQUIRES driver soc nvs_flash ulp esp_adc_cal)
 #
 # ULP support additions to component CMakeLists.txt.
 #

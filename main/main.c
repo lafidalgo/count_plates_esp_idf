@@ -8,6 +8,7 @@
 
 #include "esp_sleep.h"
 #include "esp_log.h"
+#include "esp_adc_cal.h"
 
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -23,6 +24,7 @@
 
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/adc.h"
 
 #include "esp32/ulp.h"
 #include "ulp_main.h"
@@ -92,6 +94,8 @@ static void nvsWriteSigned(const char *key, int32_t value);
 static int32_t nvsReadSigned(const char *key);
 
 static void initVariablesFromNVS(void);
+
+static uint32_t measure_battery(int number_samples);
 
 //******************** TASKS ********************
 void enterDeepSleepTask(void *pvParameters)
@@ -284,6 +288,8 @@ void app_main(void)
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
             ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
         }
+        uint32_t voltage_total = measure_battery(100);
+        ESP_LOGI(TAG, "Battery Voltage: %dmV", voltage_total);
         quantityDifferenceAccumulate = 0;
         wakeup_time_sec = 0;
         break;
@@ -606,4 +612,49 @@ void initVariablesFromNVS(void)
         unitWeight = nvsReadSigned("unitWeightValue");
     }
     ESP_LOGI(TAG, "Valor Unitário: %d", unitWeight);
+}
+
+uint32_t measure_battery(int number_samples)
+{
+    esp_adc_cal_characteristics_t *adc_chars;
+    const adc_channel_t channel = ADC_CHANNEL_6; // GPIO34 if ADC1
+    const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+    const adc_atten_t atten = ADC_ATTEN_DB_0;
+    const adc_unit_t unit = ADC_UNIT_1;
+    gpio_num_t gpio_num_battery = GPIO_NUM_32;
+
+    uint32_t default_vref = 1100;
+    uint32_t r2_value = 100;
+    uint32_t r3_value = 10;
+
+    // Config gpio_bat
+    rtc_gpio_init(gpio_num_battery);
+    rtc_gpio_set_direction(gpio_num_battery, RTC_GPIO_MODE_OUTPUT_ONLY);
+    rtc_gpio_pulldown_dis(gpio_num_battery);
+    rtc_gpio_pullup_dis(gpio_num_battery);
+    rtc_gpio_set_level(gpio_num_battery, 0);
+
+    // Configure ADC1
+    adc1_config_width(width);
+    adc1_config_channel_atten(channel, atten);
+
+    // Characterize ADC
+    adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, default_vref, adc_chars);
+
+    // Sample ADC1
+    uint32_t adc_reading = 0;
+    // Multisampling
+    rtc_gpio_set_level(gpio_num_battery, 1);
+    for (int i = 0; i < number_samples; i++)
+    {
+        adc_reading += adc1_get_raw((adc1_channel_t)channel);
+    }
+    rtc_gpio_set_level(gpio_num_battery, 0);
+    adc_reading /= number_samples;
+    // Convert adc_reading to voltage in mV
+    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+    uint32_t voltage_total = (voltage * (r2_value + r3_value)) / r3_value;
+
+    return voltage_total;
 }

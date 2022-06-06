@@ -16,7 +16,8 @@
     "regex": "c",
     "tuple": "c",
     "type_traits": "c",
-    "utility": "c"
+    "utility": "c",
+    "rtc_periph.h": "c"
   },
   "idf.adapterTargetName": "esp32",
   "idf.flashType": "UART",
