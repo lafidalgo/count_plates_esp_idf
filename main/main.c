@@ -632,7 +632,7 @@ uint32_t measure_battery(int number_samples)
     rtc_gpio_set_direction(gpio_num_battery, RTC_GPIO_MODE_OUTPUT_ONLY);
     rtc_gpio_pulldown_dis(gpio_num_battery);
     rtc_gpio_pullup_dis(gpio_num_battery);
-    rtc_gpio_set_level(gpio_num_battery, 0);
+    rtc_gpio_set_level(gpio_num_battery, 1);
 
     // Configure ADC1
     adc1_config_width(width);
@@ -645,7 +645,6 @@ uint32_t measure_battery(int number_samples)
     // Sample ADC1
     uint32_t adc_reading = 0;
     // Multisampling
-    rtc_gpio_set_level(gpio_num_battery, 1);
     for (int i = 0; i < number_samples; i++)
     {
         adc_reading += adc1_get_raw((adc1_channel_t)channel);
