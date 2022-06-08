@@ -17,7 +17,10 @@
     "tuple": "c",
     "type_traits": "c",
     "utility": "c",
-    "rtc_periph.h": "c"
+    "rtc_periph.h": "c",
+    "rtc_cntl_reg.h": "c",
+    "esp_log.h": "c",
+    "thread": "cpp"
   },
   "idf.adapterTargetName": "esp32",
   "idf.flashType": "UART",
