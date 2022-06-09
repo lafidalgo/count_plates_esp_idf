@@ -47,11 +47,13 @@
 #define BIT_1 (1 << 1)
 #define BIT_2 (1 << 2)
 #define BIT_3 (1 << 3)
+#define BIT_4 (1 << 4)
 
 const int TARE_BIT = BIT_0;
 const int CALIBRATE_BIT = BIT_1;
 const int SET_UNIT_BIT = BIT_2;
 const int ESP_NOW_BIT = BIT_3;
+const int PAIR_BIT = BIT_4;
 
 #define weightReference 2000 // 2 kg
 #define minUnitDifference 0
@@ -83,6 +85,7 @@ static RTC_DATA_ATTR struct timeval sleep_enter_time;
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
 const int ext_wakeup_pin_3 = 13;
+const int ext_wakeup_pin_4 = 27;
 
 static const char *TAG = "App";
 
@@ -97,6 +100,7 @@ TaskHandle_t taskEnterDeepSleepHandle = NULL;
 TaskHandle_t taskTareHandle = NULL;
 TaskHandle_t taskCalibrateHandle = NULL;
 TaskHandle_t taskSetUnitHandle = NULL;
+TaskHandle_t taskPairEspNowHandle = NULL;
 
 EventGroupHandle_t xEventGroupDeepSleep;
 
@@ -131,11 +135,11 @@ void enterDeepSleepTask(void *pvParameters)
     while (1)
     {
         xEventGroupWaitBits(
-            xEventGroupDeepSleep,                                  /* The event group being tested. */
-            TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT | ESP_NOW_BIT, /* The bits within the event group to wait for. */
-            pdTRUE,                                                /* BIT_0 & BIT_1 & BIT_2 should be cleared before returning. */
-            pdTRUE,                                                /* Wait for both bits. */
-            portMAX_DELAY);                                        /* Wait a maximum of 100ms for either bit to be set. */
+            xEventGroupDeepSleep,                                             /* The event group being tested. */
+            TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT | ESP_NOW_BIT | PAIR_BIT, /* The bits within the event group to wait for. */
+            pdTRUE,                                                           /* BIT_0 & BIT_1 & BIT_2 should be cleared before returning. */
+            pdTRUE,                                                           /* Wait for both bits. */
+            portMAX_DELAY);                                                   /* Wait a maximum of 100ms for either bit to be set. */
 
         if (wakeup_time_sec)
         {
@@ -154,9 +158,10 @@ void enterDeepSleepTask(void *pvParameters)
         const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
         const uint64_t ext_wakeup_pin_2_mask = 1ULL << ext_wakeup_pin_2;
         const uint64_t ext_wakeup_pin_3_mask = 1ULL << ext_wakeup_pin_3;
+        const uint64_t ext_wakeup_pin_4_mask = 1ULL << ext_wakeup_pin_4;
 
         // ESP_LOGI(TAG, "Enabling EXT1 wakeup on pins GPIO%d, GPIO%d, GPIO%d", ext_wakeup_pin_1, ext_wakeup_pin_2, ext_wakeup_pin_3);
-        esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+        esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask | ext_wakeup_pin_2_mask | ext_wakeup_pin_3_mask | ext_wakeup_pin_4_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
         // ESP_LOGI(TAG, "Enabling ULP wakeup");
         ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
@@ -248,6 +253,33 @@ void setUnitTask(void *pvParameters)
     }
 }
 
+void pairEspNowTask(void *pvParameters)
+{
+    float weightGrams = 0;
+    float quantityUnits = 0;
+    while (1)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        ESP_LOGI(TAG, "Pair Esp Now Task.");
+        ulp_setRepeatMeasure = 1;
+        ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
+        uint32_t HX711Total = readWeight();
+        if (HX711Total)
+        {
+            ESP_LOGI(TAG, "Valor Total: %d", HX711Total);
+            weightGrams = ((float)HX711Total - (float)tare) / calibration;
+            ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
+            quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
+            ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
+        }
+        uint32_t voltage_total = measure_battery(100);
+        ESP_LOGI(TAG, "Battery Voltage: %dmV", voltage_total);
+        example_espnow_send_data(EXAMPLE_ESPNOW_DATA_PAIR, weightGrams, quantityUnits, voltage_total);
+        blinkLED();
+        xEventGroupSetBits(xEventGroupDeepSleep, PAIR_BIT);
+    }
+}
+
 //******************** App Main ********************
 void app_main(void)
 {
@@ -257,12 +289,13 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "The event group was not created.");
     }
-    xEventGroupSetBits(xEventGroupDeepSleep, TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT | ESP_NOW_BIT);
+    xEventGroupSetBits(xEventGroupDeepSleep, TARE_BIT | CALIBRATE_BIT | SET_UNIT_BIT | ESP_NOW_BIT | PAIR_BIT);
 
     /*Criação Tasks*/
     xTaskCreate(tareTask, "tareTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskTareHandle);
     xTaskCreate(calibrateTask, "calibrateTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskCalibrateHandle);
     xTaskCreate(setUnitTask, "setUnitTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskSetUnitHandle);
+    xTaskCreate(pairEspNowTask, "pairEspNowTask", configMINIMAL_STACK_SIZE * 3, NULL, 5, &taskPairEspNowHandle);
 
     /* Initialize LED GPIO */
     rtc_gpio_init(led_pin);
@@ -294,6 +327,10 @@ void app_main(void)
             case ext_wakeup_pin_3:
                 xEventGroupClearBits(xEventGroupDeepSleep, SET_UNIT_BIT);
                 xTaskNotifyGive(taskSetUnitHandle);
+                break;
+            case ext_wakeup_pin_4:
+                xEventGroupClearBits(xEventGroupDeepSleep, PAIR_BIT);
+                xTaskNotifyGive(taskPairEspNowHandle);
                 break;
             }
         }
