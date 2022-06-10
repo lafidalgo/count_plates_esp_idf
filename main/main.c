@@ -69,6 +69,7 @@ const int PAIR_BIT = BIT_4;
 #define ESPNOW_MAXDELAY 512
 #define ESPNOW_CHANNEL 1
 #define ESPNOW_PMK "pmk1234567890123"
+#define ESPNOW_TIMEOUT 100
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -428,6 +429,9 @@ void app_main(void)
         ESP_LOGI(TAG, "Not a deep sleep reset, initializing ULP");
         initVariablesFromNVS();
         init_ulp_program();
+        uint32_t voltage_total = measure_battery(100);
+        xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+        example_espnow_send_data(EXAMPLE_ESPNOW_DATA_HEARTBEAT, 0, 0, voltage_total);
     }
 
     /*Criação Task Deep Sleep*/
@@ -852,7 +856,7 @@ static void example_espnow_task(void *pvParameter)
         vTaskDelete(NULL);
     }
 
-    while (xQueueReceive(s_example_espnow_queue, &evt, portMAX_DELAY) == pdTRUE)
+    while (xQueueReceive(s_example_espnow_queue, &evt, (ESPNOW_TIMEOUT / portTICK_PERIOD_MS)) == pdTRUE)
     {
         switch (evt.id)
         {
@@ -864,14 +868,6 @@ static void example_espnow_task(void *pvParameter)
             ret = buf->type;
 
             ESP_LOGI(TAG, "Send data to " MACSTR ", status: %d, type: %d", MAC2STR(send_cb->mac_addr), send_cb->status, ret);
-
-            if (ret == EXAMPLE_ESPNOW_DATA_SEND)
-            {
-                esp_now_deinit();
-                esp_wifi_stop();
-
-                xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
-            }
 
             break;
         }
@@ -885,6 +881,13 @@ static void example_espnow_task(void *pvParameter)
             if (ret == EXAMPLE_ESPNOW_DATA_SEND)
             {
                 ESP_LOGI(TAG, "Received send data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+
+                esp_now_deinit();
+                esp_wifi_stop();
+
+                xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
+                vTaskDelete(NULL);
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_HEARTBEAT)
             {
@@ -896,6 +899,8 @@ static void example_espnow_task(void *pvParameter)
                 esp_wifi_stop();
 
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
+                vTaskDelete(NULL);
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_PAIR)
             {
@@ -929,6 +934,8 @@ static void example_espnow_task(void *pvParameter)
                 esp_wifi_stop();
 
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
+                vTaskDelete(NULL);
             }
             else
             {
@@ -941,6 +948,14 @@ static void example_espnow_task(void *pvParameter)
             break;
         }
     }
+
+    ESP_LOGW(TAG, "ESP NOW timeout");
+    esp_now_deinit();
+    esp_wifi_stop();
+
+    xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
+    vTaskDelete(NULL);
 }
 
 static esp_err_t example_espnow_send_data(int type, float weightGrams, float quantityUnits, uint32_t batVoltage)
