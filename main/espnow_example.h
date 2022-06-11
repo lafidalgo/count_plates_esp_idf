@@ -60,6 +60,7 @@ enum
     EXAMPLE_ESPNOW_DATA_SEND,
     EXAMPLE_ESPNOW_DATA_HEARTBEAT,
     EXAMPLE_ESPNOW_DATA_PAIR,
+    EXAMPLE_ESPNOW_DATA_RESET,
 };
 
 /* User defined field of ESPNOW data in this example. */

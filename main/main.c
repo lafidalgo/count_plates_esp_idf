@@ -431,7 +431,7 @@ void app_main(void)
         init_ulp_program();
         uint32_t voltage_total = measure_battery(100);
         xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
-        example_espnow_send_data(EXAMPLE_ESPNOW_DATA_HEARTBEAT, 0, 0, voltage_total);
+        example_espnow_send_data(EXAMPLE_ESPNOW_DATA_RESET, 0, 0, voltage_total);
     }
 
     /*Criação Task Deep Sleep*/
@@ -937,6 +937,19 @@ static void example_espnow_task(void *pvParameter)
 
                 vTaskDelete(NULL);
             }
+            else if (ret == EXAMPLE_ESPNOW_DATA_RESET)
+            {
+                ESP_LOGI(TAG, "Received reset data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+
+                // Atualizar parâmetros
+
+                esp_now_deinit();
+                esp_wifi_stop();
+
+                xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
+                vTaskDelete(NULL);
+            }
             else
             {
                 ESP_LOGI(TAG, "Received error data from: " MACSTR "", MAC2STR(recv_cb->mac_addr));
@@ -993,7 +1006,7 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     /* Initialize ESPNOW and register sending and receiving callback function. */
     ESP_ERROR_CHECK(esp_now_init());
     ESP_ERROR_CHECK(esp_now_register_send_cb(example_espnow_send_cb));
-    if (type == EXAMPLE_ESPNOW_DATA_HEARTBEAT || type == EXAMPLE_ESPNOW_DATA_PAIR)
+    if (type == EXAMPLE_ESPNOW_DATA_HEARTBEAT || type == EXAMPLE_ESPNOW_DATA_PAIR || type == EXAMPLE_ESPNOW_DATA_RESET)
     {
         ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
     }
