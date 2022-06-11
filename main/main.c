@@ -880,7 +880,7 @@ static void example_espnow_task(void *pvParameter)
 
             if (ret == EXAMPLE_ESPNOW_DATA_SEND)
             {
-                ESP_LOGI(TAG, "Received send data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received send data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
 
                 esp_now_deinit();
                 esp_wifi_stop();
@@ -891,7 +891,7 @@ static void example_espnow_task(void *pvParameter)
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_HEARTBEAT)
             {
-                ESP_LOGI(TAG, "Received heartbeat data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received heartbeat data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
 
                 // Atualizar parâmetros
 
@@ -904,7 +904,7 @@ static void example_espnow_task(void *pvParameter)
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_PAIR)
             {
-                ESP_LOGI(TAG, "Received pair data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received pair data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
 
                 /* If MAC address does not exist in peer list, add it to peer list. */
                 if (esp_now_is_peer_exist(recv_cb->mac_addr) == false)
@@ -939,7 +939,7 @@ static void example_espnow_task(void *pvParameter)
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_RESET)
             {
-                ESP_LOGI(TAG, "Received reset data from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received reset data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
 
                 // Atualizar parâmetros
 
@@ -1006,10 +1006,7 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     /* Initialize ESPNOW and register sending and receiving callback function. */
     ESP_ERROR_CHECK(esp_now_init());
     ESP_ERROR_CHECK(esp_now_register_send_cb(example_espnow_send_cb));
-    if (type == EXAMPLE_ESPNOW_DATA_HEARTBEAT || type == EXAMPLE_ESPNOW_DATA_PAIR || type == EXAMPLE_ESPNOW_DATA_RESET)
-    {
-        ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
-    }
+    ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
 
     /* Set primary master key. */
     ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)ESPNOW_PMK));
