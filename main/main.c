@@ -91,8 +91,6 @@ const int ext_wakeup_pin_3 = 13;
 static const char *TAG = "App";
 
 static uint8_t s_example_broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static uint8_t s_example_unicast_mac[ESP_NOW_ETH_ALEN] = {0x78, 0xE3, 0x6D, 0x09, 0x1B, 0x40};
-static uint8_t s_example_unicast2_mac[ESP_NOW_ETH_ALEN] = {0x30, 0xC6, 0xF7, 0x03, 0x86, 0xB4};
 
 gpio_num_t led_pin = GPIO_NUM_14;
 
@@ -825,22 +823,9 @@ static void example_espnow_task(void *pvParameter)
 
     /* Start sending ESPNOW data. */
     example_espnow_send_param_t *send_param = (example_espnow_send_param_t *)pvParameter;
-    esp_now_peer_num_t *num = malloc(sizeof(esp_now_peer_num_t));
-    esp_err_t send_err;
 
-    ESP_ERROR_CHECK(esp_now_get_peer_num(num));
-
-    if (num->total_num == 1)
+    if (esp_now_send(s_example_broadcast_mac, send_param->buffer, send_param->len) != ESP_OK)
     {
-        send_err = esp_now_send(s_example_broadcast_mac, send_param->buffer, send_param->len);
-    }
-    else
-    {
-        send_err = esp_now_send(NULL, send_param->buffer, send_param->len);
-    }
-    if (send_err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Send error, %d", send_err);
         example_espnow_deinit(send_param);
         vTaskDelete(NULL);
     }
@@ -966,30 +951,23 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)ESPNOW_PMK));
 
     /* Add broadcast peer information to peer list. */
-    esp_now_peer_num_t *num = malloc(sizeof(esp_now_peer_num_t));
-
-    ESP_ERROR_CHECK(esp_now_get_peer_num(num));
-
-    if (num->total_num == 0)
+    esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
+    if (peer == NULL)
     {
-        esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
-        if (peer == NULL)
-        {
-            ESP_LOGE(TAG, "Malloc peer information fail");
-            vSemaphoreDelete(s_example_espnow_queue);
-            esp_now_deinit();
-            xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
-            return ESP_FAIL;
-        }
-        memset(peer, 0, sizeof(esp_now_peer_info_t));
-        peer->channel = ESPNOW_CHANNEL;
-        peer->ifidx = ESPNOW_WIFI_IF;
-        peer->encrypt = false;
-        memcpy(peer->peer_addr, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
-        ESP_ERROR_CHECK(esp_now_add_peer(peer));
-        free(peer);
-        ESP_LOGI(TAG, "Broadcast added to peer list.");
+        ESP_LOGE(TAG, "Malloc peer information fail");
+        vSemaphoreDelete(s_example_espnow_queue);
+        esp_now_deinit();
+        xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+        return ESP_FAIL;
     }
+    memset(peer, 0, sizeof(esp_now_peer_info_t));
+    peer->channel = ESPNOW_CHANNEL;
+    peer->ifidx = ESPNOW_WIFI_IF;
+    peer->encrypt = false;
+    memcpy(peer->peer_addr, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
+    ESP_ERROR_CHECK(esp_now_add_peer(peer));
+    free(peer);
+    ESP_LOGI(TAG, "Broadcast added to peer list.");
 
     /* Initialize sending parameters. */
     send_param = malloc(sizeof(example_espnow_send_param_t));
