@@ -70,6 +70,7 @@ const int PAIR_BIT = BIT_4;
 #define ESPNOW_CHANNEL 1
 #define ESPNOW_PMK "pmk1234567890123"
 #define ESPNOW_TIMEOUT 100
+#define HEARTBEAT_TIME 60 // Em s
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -80,8 +81,10 @@ static RTC_DATA_ATTR int32_t unitWeight = 1;
 static RTC_DATA_ATTR float lastQuantity = 0;
 static RTC_DATA_ATTR uint32_t lastHX711Total = 0;
 static RTC_DATA_ATTR float quantityDifferenceAccumulate = 0;
-static RTC_DATA_ATTR int wakeup_time_sec = 0;
+static RTC_DATA_ATTR int wakeup_message_time_sec = 0;
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
+static RTC_DATA_ATTR int wakeup_heartbeat_time_sec = 0;
+static RTC_DATA_ATTR struct timeval heartbeat_enter_time;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -142,17 +145,30 @@ void enterDeepSleepTask(void *pvParameters)
             pdTRUE,                                                           /* Wait for both bits. */
             portMAX_DELAY);                                                   /* Wait a maximum of 100ms for either bit to be set. */
 
-        if (wakeup_time_sec)
+        if (wakeup_message_time_sec)
         {
             struct timeval now;
             gettimeofday(&now, NULL);
             int sleep_time_s = now.tv_sec - sleep_enter_time.tv_sec;
-            int remaining_wake_up = wakeup_time_sec - sleep_time_s;
+            int remaining_wake_up = wakeup_message_time_sec - sleep_time_s;
             if (remaining_wake_up < 0)
             {
                 remaining_wake_up = 0;
             }
-            ESP_LOGI(TAG, "Wake up remaining time: %ds", remaining_wake_up);
+            ESP_LOGI(TAG, "Wake up send remaining time: %ds", remaining_wake_up);
+            esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
+        }
+        else if (wakeup_heartbeat_time_sec)
+        {
+            struct timeval now;
+            gettimeofday(&now, NULL);
+            int sleep_time_s = now.tv_sec - heartbeat_enter_time.tv_sec;
+            int remaining_wake_up = wakeup_heartbeat_time_sec - sleep_time_s;
+            if (remaining_wake_up < 0)
+            {
+                remaining_wake_up = 0;
+            }
+            ESP_LOGI(TAG, "Wake up heartbeat remaining time: %ds", remaining_wake_up);
             esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
         }
 
@@ -359,9 +375,17 @@ void app_main(void)
         }
         uint32_t voltage_total = measure_battery(100);
         ESP_LOGI(TAG, "Battery Voltage: %dmV", voltage_total);
-        quantityDifferenceAccumulate = 0;
-        wakeup_time_sec = 0;
-        example_espnow_send_data(EXAMPLE_ESPNOW_DATA_SEND, weightGrams, quantityUnits, voltage_total);
+        if (wakeup_message_time_sec)
+        {
+            quantityDifferenceAccumulate = 0;
+            wakeup_message_time_sec = 0;
+            example_espnow_send_data(EXAMPLE_ESPNOW_DATA_SEND, weightGrams, quantityUnits, voltage_total);
+        }
+        else if (wakeup_heartbeat_time_sec)
+        {
+            gettimeofday(&heartbeat_enter_time, NULL);
+            example_espnow_send_data(EXAMPLE_ESPNOW_DATA_HEARTBEAT, weightGrams, quantityUnits, voltage_total);
+        }
         break;
     }
     case ESP_SLEEP_WAKEUP_ULP:
@@ -400,23 +424,23 @@ void app_main(void)
 
             if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
             {
-                wakeup_time_sec = 0; // Não envia
+                wakeup_message_time_sec = 0; // Não envia
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceLowPriority + 0.5)) // De 0.5 a 1.5 de diferença
             {
-                wakeup_time_sec = 90; // 15 min
+                wakeup_message_time_sec = 90; // 15 min
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceMediumPriority + 0.5)) // De 1.5 a 2.5 de diferença
             {
-                wakeup_time_sec = 60; // 10 min
+                wakeup_message_time_sec = 60; // 10 min
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // De 2.5 a 5.5 de diferença
             {
-                wakeup_time_sec = 30; // 5 min
+                wakeup_message_time_sec = 30; // 5 min
             }
             else if (quantityDifferenceAccumulate > (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // Maior que 5.5
             {
-                wakeup_time_sec = 6; // 1 min
+                wakeup_message_time_sec = 6; // 1 min
             }
 
             lastQuantity = quantityUnits;
@@ -429,6 +453,8 @@ void app_main(void)
         ESP_LOGI(TAG, "Not a deep sleep reset, initializing ULP");
         initVariablesFromNVS();
         init_ulp_program();
+        gettimeofday(&heartbeat_enter_time, NULL);
+        wakeup_heartbeat_time_sec = HEARTBEAT_TIME;
         uint32_t voltage_total = measure_battery(100);
         xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
         example_espnow_send_data(EXAMPLE_ESPNOW_DATA_RESET, 0, 0, voltage_total);
