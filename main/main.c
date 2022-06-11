@@ -69,7 +69,7 @@ const int PAIR_BIT = BIT_4;
 #define ESPNOW_MAXDELAY 512
 #define ESPNOW_CHANNEL 1
 #define ESPNOW_PMK "pmk1234567890123"
-#define ESPNOW_TIMEOUT 100
+#define ESPNOW_TIMEOUT 10
 #define HEARTBEAT_TIME 60 // Em s
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
