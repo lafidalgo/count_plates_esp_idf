@@ -65,10 +65,15 @@ const int ESP_NOW_BIT = BIT_3;
 #define repeatMeasureQuantity 5
 
 #define ESPNOW_MAXDELAY 512
-#define ESPNOW_CHANNEL 6
 #define ESPNOW_PMK "pmk1234567890123"
-#define ESPNOW_TIMEOUT 10
+#define ESPNOW_TIMEOUT 20
 #define HEARTBEAT_TIME 60 // Em s
+
+int last_type = 0;
+float last_weightGrams = 0;
+float last_quantityUnits = 0;
+uint32_t last_batVoltage = 0;
+bool alreadyInitEspNow = false;
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[] asm("_binary_ulp_main_bin_end");
@@ -83,6 +88,7 @@ static RTC_DATA_ATTR int wakeup_message_time_sec = 0;
 static RTC_DATA_ATTR struct timeval sleep_enter_time;
 static RTC_DATA_ATTR int wakeup_heartbeat_time_sec = 0;
 static RTC_DATA_ATTR struct timeval heartbeat_enter_time;
+static RTC_DATA_ATTR uint8_t wifi_channel;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -103,6 +109,8 @@ TaskHandle_t taskSetUnitHandle = NULL;
 EventGroupHandle_t xEventGroupDeepSleep;
 
 static xQueueHandle s_example_espnow_queue;
+
+SemaphoreHandle_t xSemaphoreEspNowTimeout;
 
 //******************** FUNCTIONS ********************
 static void init_ulp_program(void);
@@ -413,6 +421,7 @@ void app_main(void)
     default:
         ESP_LOGI(TAG, "Not a deep sleep reset, initializing ULP");
         initVariablesFromNVS();
+        wifi_channel = 1;
         init_ulp_program();
         gettimeofday(&heartbeat_enter_time, NULL);
         wakeup_heartbeat_time_sec = HEARTBEAT_TIME;
@@ -841,7 +850,7 @@ static void example_espnow_task(void *pvParameter)
 
             ret = buf->type;
 
-            ESP_LOGI(TAG, "Send data to " MACSTR ", status: %d, type: %d", MAC2STR(send_cb->mac_addr), send_cb->status, ret);
+            ESP_LOGI(TAG, "Send data to " MACSTR ", status: %d, type: %d, channel: %d", MAC2STR(send_cb->mac_addr), send_cb->status, ret, wifi_channel);
 
             break;
         }
@@ -902,57 +911,108 @@ static void example_espnow_task(void *pvParameter)
     }
 
     ESP_LOGW(TAG, "ESP NOW timeout");
-    esp_now_deinit();
-    esp_wifi_stop();
 
-    xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+    xSemaphoreGive(xSemaphoreEspNowTimeout);
 
     vTaskDelete(NULL);
 }
 
+static void espnow_scan_channel_task(void *pvParameter)
+{
+    bool alreadyInit = false;
+    while (1)
+    {
+        xSemaphoreTake(xSemaphoreEspNowTimeout, portMAX_DELAY);
+
+        if (last_type == EXAMPLE_ESPNOW_DATA_HEARTBEAT || last_type == EXAMPLE_ESPNOW_DATA_RESET)
+        {
+            if (!alreadyInit)
+            {
+                wifi_channel = 0;
+                alreadyInit = true;
+            }
+            if (wifi_channel < 11)
+            {
+                wifi_channel++;
+                example_espnow_send_data(last_type, last_weightGrams, last_quantityUnits, last_batVoltage);
+            }
+            else
+            {
+                esp_now_deinit();
+                esp_wifi_stop();
+                xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+                vTaskDelete(NULL);
+            }
+        }
+        else
+        {
+            esp_now_deinit();
+            esp_wifi_stop();
+            xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+            vTaskDelete(NULL);
+        }
+    }
+}
+
 static esp_err_t example_espnow_send_data(int type, float weightGrams, float quantityUnits, uint32_t batVoltage)
 {
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    if (!alreadyInitEspNow)
     {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
+        alreadyInitEspNow = true;
+        // Initialize NVS
+        esp_err_t ret = nvs_flash_init();
+        if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+        {
+            ESP_ERROR_CHECK(nvs_flash_erase());
+            ret = nvs_flash_init();
+        }
+        ESP_ERROR_CHECK(ret);
 
-    // Init WiFi
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(ESPNOW_WIFI_MODE));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
-    ESP_ERROR_CHECK(esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
-    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(false));
+        // Init WiFi
+        ESP_ERROR_CHECK(esp_netif_init());
+        ESP_ERROR_CHECK(esp_event_loop_create_default());
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+        ESP_ERROR_CHECK(esp_wifi_set_mode(ESPNOW_WIFI_MODE));
+        ESP_ERROR_CHECK(esp_wifi_start());
 
 #if CONFIG_ESPNOW_ENABLE_LONG_RANGE
-    ESP_ERROR_CHECK(esp_wifi_set_protocol(ESPNOW_WIFI_IF, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR));
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(ESPNOW_WIFI_IF, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR));
 #endif
 
-    example_espnow_send_param_t *send_param;
-    s_example_espnow_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(example_espnow_event_t));
-    if (s_example_espnow_queue == NULL)
+        s_example_espnow_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(example_espnow_event_t));
+        if (s_example_espnow_queue == NULL)
+        {
+            ESP_LOGE(TAG, "Create mutex fail");
+            return ESP_FAIL;
+        }
+
+        xSemaphoreEspNowTimeout = xSemaphoreCreateBinary();
+        if (xSemaphoreEspNowTimeout == NULL)
+        {
+            ESP_LOGW(TAG, "Não foi possível criar o semáforo");
+            esp_restart();
+        }
+
+        /* Initialize ESPNOW and register sending and receiving callback function. */
+        ESP_ERROR_CHECK(esp_now_init());
+        ESP_ERROR_CHECK(esp_now_register_send_cb(example_espnow_send_cb));
+        ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
+
+        /* Set primary master key. */
+        ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)ESPNOW_PMK));
+
+        xTaskCreate(espnow_scan_channel_task, "espnow_scan_channel_task", 2048, NULL, 4, NULL);
+    }
+    else
     {
-        ESP_LOGE(TAG, "Create mutex fail");
-        return ESP_FAIL;
+        ESP_ERROR_CHECK(esp_now_del_peer(s_example_broadcast_mac));
     }
 
-    /* Initialize ESPNOW and register sending and receiving callback function. */
-    ESP_ERROR_CHECK(esp_now_init());
-    ESP_ERROR_CHECK(esp_now_register_send_cb(example_espnow_send_cb));
-    ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
-
-    /* Set primary master key. */
-    ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)ESPNOW_PMK));
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
+    ESP_ERROR_CHECK(esp_wifi_set_channel(wifi_channel, WIFI_SECOND_CHAN_NONE));
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(false));
 
     /* Add broadcast peer information to peer list. */
     esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
@@ -965,7 +1025,7 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
         return ESP_FAIL;
     }
     memset(peer, 0, sizeof(esp_now_peer_info_t));
-    peer->channel = ESPNOW_CHANNEL;
+    peer->channel = wifi_channel;
     peer->ifidx = ESPNOW_WIFI_IF;
     peer->encrypt = false;
     memcpy(peer->peer_addr, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
@@ -973,6 +1033,7 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     free(peer);
     ESP_LOGI(TAG, "Broadcast added to peer list.");
 
+    example_espnow_send_param_t *send_param;
     /* Initialize sending parameters. */
     send_param = malloc(sizeof(example_espnow_send_param_t));
     memset(send_param, 0, sizeof(example_espnow_send_param_t));
@@ -998,6 +1059,11 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     memcpy(send_param->dest_mac, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
 
     example_espnow_data_prepare(send_param, type, weightGrams, quantityUnits, batVoltage);
+
+    last_type = type;
+    last_weightGrams = weightGrams;
+    last_quantityUnits = quantityUnits;
+    last_batVoltage = batVoltage;
 
     xTaskCreate(example_espnow_task, "example_espnow_task", 2048, send_param, 4, NULL);
 
