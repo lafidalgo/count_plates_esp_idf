@@ -65,6 +65,7 @@ enum
 /* User defined field of ESPNOW data in this example. */
 typedef struct
 {
+    uint8_t wifi_channel;
     uint8_t type;      // Broadcast or unicast ESPNOW data.
     uint16_t crc;      // CRC16 value of ESPNOW data.
     float weightGrams; // Real payload of ESPNOW data.

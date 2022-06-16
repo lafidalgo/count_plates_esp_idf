@@ -806,10 +806,11 @@ int example_espnow_data_parse(uint8_t *data, uint16_t data_len, uint8_t *state, 
 }
 
 /* Prepare ESPNOW data to be sent. */
-void example_espnow_data_prepare(example_espnow_send_param_t *send_param, int type, float weightGrams, float quantityUnits, uint32_t batVoltage)
+void example_espnow_data_prepare(example_espnow_send_param_t *send_param, uint8_t wifi_channel, int type, float weightGrams, float quantityUnits, uint32_t batVoltage)
 {
     example_espnow_data_t *buf = (example_espnow_data_t *)send_param->buffer;
 
+    buf->wifi_channel = wifi_channel;
     buf->type = type;
     buf->crc = 0;
 
@@ -1058,7 +1059,7 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     }
     memcpy(send_param->dest_mac, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
 
-    example_espnow_data_prepare(send_param, type, weightGrams, quantityUnits, batVoltage);
+    example_espnow_data_prepare(send_param, wifi_channel, type, weightGrams, quantityUnits, batVoltage);
 
     last_type = type;
     last_weightGrams = weightGrams;
