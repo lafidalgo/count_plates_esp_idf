@@ -65,7 +65,7 @@ const int ESP_NOW_BIT = BIT_3;
 #define repeatMeasureQuantity 5
 
 #define ESPNOW_MAXDELAY 512
-#define ESPNOW_CHANNEL 1
+#define ESPNOW_CHANNEL 6
 #define ESPNOW_PMK "pmk1234567890123"
 #define ESPNOW_TIMEOUT 10
 #define HEARTBEAT_TIME 60 // Em s
@@ -929,6 +929,10 @@ static esp_err_t example_espnow_send_data(int type, float weightGrams, float qua
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(ESPNOW_WIFI_MODE));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));
+    ESP_ERROR_CHECK(esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+    ESP_ERROR_CHECK(esp_wifi_set_promiscuous(false));
 
 #if CONFIG_ESPNOW_ENABLE_LONG_RANGE
     ESP_ERROR_CHECK(esp_wifi_set_protocol(ESPNOW_WIFI_IF, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR));
