@@ -53,7 +53,6 @@ const int CALIBRATE_BIT = BIT_1;
 const int SET_UNIT_BIT = BIT_2;
 const int ESP_NOW_BIT = BIT_3;
 
-#define weightReference 2000 // 2 kg
 #define minUnitDifference 0
 #define UnitDifferenceLowPriority 1
 #define UnitDifferenceMediumPriority 2
@@ -89,6 +88,7 @@ static RTC_DATA_ATTR struct timeval sleep_enter_time;
 static RTC_DATA_ATTR int wakeup_heartbeat_time_sec = 0;
 static RTC_DATA_ATTR struct timeval heartbeat_enter_time;
 static RTC_DATA_ATTR uint8_t wifi_channel;
+static RTC_DATA_ATTR uint16_t weightReference = 2000;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -779,7 +779,7 @@ static void example_espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data,
 }
 
 /* Parse received ESPNOW data. */
-int example_espnow_data_parse(uint8_t *data, uint16_t data_len, uint8_t *state, int *magic, float *weightGrams, float *quantityUnits, uint32_t *batVoltage)
+int example_espnow_data_parse(uint8_t *data, uint16_t data_len, uint16_t *weightReference)
 {
     example_espnow_data_t *buf = (example_espnow_data_t *)data;
     uint16_t crc, crc_cal = 0;
@@ -790,9 +790,7 @@ int example_espnow_data_parse(uint8_t *data, uint16_t data_len, uint8_t *state, 
         return -1;
     }
 
-    *weightGrams = buf->weightGrams;
-    *quantityUnits = buf->quantityUnits;
-    *batVoltage = buf->batVoltage;
+    *weightReference = buf->weightReference;
     crc = buf->crc;
     buf->crc = 0;
     crc_cal = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, data_len);
@@ -818,17 +816,15 @@ void example_espnow_data_prepare(example_espnow_send_param_t *send_param, uint8_
     buf->quantityUnits = quantityUnits;
     buf->batVoltage = batVoltage;
 
+    buf->weightReference = 0;
+
     buf->crc = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, send_param->len);
 }
 
 static void example_espnow_task(void *pvParameter)
 {
     example_espnow_event_t evt;
-    uint8_t recv_state = 0;
-    int recv_magic = 0;
-    float recv_weightGrams = 0;
-    float recv_quantityUnits = 0;
-    uint32_t recv_batVoltage = 0;
+    uint16_t recv_weightReference = 0;
     int ret;
 
     /* Start sending ESPNOW data. */
@@ -859,12 +855,12 @@ static void example_espnow_task(void *pvParameter)
         {
             example_espnow_event_recv_cb_t *recv_cb = &evt.info.recv_cb;
 
-            ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_state, &recv_magic, &recv_weightGrams, &recv_quantityUnits, &recv_batVoltage);
+            ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_weightReference);
             free(recv_cb->data);
 
             if (ret == EXAMPLE_ESPNOW_DATA_SEND)
             {
-                ESP_LOGI(TAG, "Received send data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received send data ACK from: " MACSTR ", len: %d, payload: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference);
 
                 esp_now_deinit();
                 esp_wifi_stop();
@@ -875,12 +871,14 @@ static void example_espnow_task(void *pvParameter)
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_HEARTBEAT)
             {
-                ESP_LOGI(TAG, "Received heartbeat data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received heartbeat data ACK from: " MACSTR ", len: %d, weightReference: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference);
 
                 // Atualizar parâmetros
 
                 esp_now_deinit();
                 esp_wifi_stop();
+
+                weightReference = recv_weightReference;
 
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
 
@@ -888,7 +886,7 @@ static void example_espnow_task(void *pvParameter)
             }
             else if (ret == EXAMPLE_ESPNOW_DATA_RESET)
             {
-                ESP_LOGI(TAG, "Received reset data ACK from: " MACSTR ", len: %d, payload: %f\t%f\t%d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightGrams, recv_quantityUnits, recv_batVoltage);
+                ESP_LOGI(TAG, "Received reset data ACK from: " MACSTR ", len: %d, payload: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference);
 
                 // Atualizar parâmetros
 

@@ -71,6 +71,7 @@ typedef struct
     float weightGrams; // Real payload of ESPNOW data.
     float quantityUnits;
     uint32_t batVoltage;
+    uint16_t weightReference;
 } __attribute__((packed)) example_espnow_data_t;
 
 /* Parameters of sending ESPNOW data. */
