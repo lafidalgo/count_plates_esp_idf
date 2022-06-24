@@ -127,6 +127,10 @@ static void nvsWriteSigned(const char *key, int32_t value);
 
 static int32_t nvsReadSigned(const char *key);
 
+static void nvsWriteUnsigned_16t(const char *key, uint16_t value);
+
+static uint16_t nvsReadUnsigned_16t(const char *key);
+
 static void initVariablesFromNVS(void);
 
 static uint32_t measure_battery(int number_samples);
@@ -656,6 +660,77 @@ int32_t nvsReadSigned(const char *key)
     }
 }
 
+void nvsWriteUnsigned_16t(const char *key, uint16_t value)
+{
+    nvs_handle handler_particao_nvs;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
+        return;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
+        return;
+    }
+
+    /* Atualiza valor */
+    err = nvs_set_u16(handler_particao_nvs, key, value);
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Erro ao gravar");
+        nvs_close(handler_particao_nvs);
+        return;
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Dado gravado com sucesso!");
+        nvs_commit(handler_particao_nvs);
+        nvs_close(handler_particao_nvs);
+    }
+}
+
+uint16_t nvsReadUnsigned_16t(const char *key)
+{
+    nvs_handle handler_particao_nvs;
+    uint32_t value;
+    esp_err_t err = nvs_flash_init_partition("nvs");
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Falha ao iniciar partição NVS.");
+        return 0;
+    }
+
+    err = nvs_open_from_partition("nvs", "ns_nvs", NVS_READWRITE, &handler_particao_nvs);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Falha ao abrir NVS como escrita/leitura");
+        return 0;
+    }
+
+    /* Faz a leitura do dado associado a chave definida em CHAVE_NVS */
+    err = nvs_get_u16(handler_particao_nvs, key, &value);
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Falha ao fazer leitura do dado");
+        nvs_close(handler_particao_nvs);
+        return 0;
+    }
+    else
+    {
+        // ESP_LOGI(TAG, "Dado lido com sucesso!");
+        nvs_close(handler_particao_nvs);
+        return value;
+    }
+}
+
 void initVariablesFromNVS(void)
 {
     tare = nvsReadUnsigned("tareValue");
@@ -681,6 +756,14 @@ void initVariablesFromNVS(void)
         unitWeight = nvsReadSigned("unitWeightValue");
     }
     ESP_LOGI(TAG, "Valor Unitário: %d", unitWeight);
+
+    weightReference = nvsReadUnsigned_16t("weightReference");
+    if (!weightReference)
+    {
+        nvsWriteUnsigned_16t("weightReference", 2000);
+        weightReference = nvsReadUnsigned_16t("weightReference");
+    }
+    ESP_LOGI(TAG, "Weight Reference: %d", weightReference);
 }
 
 uint32_t measure_battery(int number_samples)
@@ -879,6 +962,7 @@ static void example_espnow_task(void *pvParameter)
                 esp_wifi_stop();
 
                 weightReference = recv_weightReference;
+                nvsWriteUnsigned_16t("weightReference", weightReference);
 
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
 
@@ -894,6 +978,7 @@ static void example_espnow_task(void *pvParameter)
                 esp_wifi_stop();
 
                 weightReference = recv_weightReference;
+                nvsWriteUnsigned_16t("weightReference", weightReference);
 
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
 
