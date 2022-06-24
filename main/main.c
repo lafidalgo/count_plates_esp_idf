@@ -893,6 +893,8 @@ static void example_espnow_task(void *pvParameter)
                 esp_now_deinit();
                 esp_wifi_stop();
 
+                weightReference = recv_weightReference;
+
                 xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
 
                 vTaskDelete(NULL);
