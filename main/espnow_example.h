@@ -72,6 +72,9 @@ typedef struct
     float quantityUnits;
     uint32_t batVoltage;
     uint16_t weightReference;
+    uint16_t repMeasureQtd;
+    uint16_t ulpWakeUpPeriod;
+    uint16_t heartbeatPeriod;
 } __attribute__((packed)) example_espnow_data_t;
 
 /* Parameters of sending ESPNOW data. */
