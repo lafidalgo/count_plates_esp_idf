@@ -21,7 +21,8 @@
     "rtc_cntl_reg.h": "c",
     "esp_log.h": "c",
     "thread": "cpp",
-    "chrono": "c"
+    "chrono": "c",
+    "*.ipp": "c"
   },
   "idf.adapterTargetName": "esp32",
   "idf.flashType": "UART",

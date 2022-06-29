@@ -969,6 +969,7 @@ static void example_espnow_task(void *pvParameter)
         case EXAMPLE_ESPNOW_RECV_CB:
         {
             example_espnow_event_recv_cb_t *recv_cb = &evt.info.recv_cb;
+            bool resetESP = false;
 
             ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_weightReference, &recv_repMeasureQtd, &recv_ulpWakeUpPeriod, &recv_heartbeatPeriod);
             free(recv_cb->data);
@@ -1002,6 +1003,7 @@ static void example_espnow_task(void *pvParameter)
             {
                 repMeasureQtd = recv_repMeasureQtd;
                 nvsWriteUnsigned_16t("repMeasureQtd", repMeasureQtd);
+                resetESP = true;
             }
             if (ulpWakeUpPeriod != recv_ulpWakeUpPeriod)
             {
@@ -1012,6 +1014,13 @@ static void example_espnow_task(void *pvParameter)
             {
                 heartbeatPeriod = recv_heartbeatPeriod;
                 nvsWriteUnsigned_16t("heartbeatPeriod", heartbeatPeriod);
+                resetESP = true;
+            }
+
+            if (resetESP)
+            {
+                ESP_LOGW(TAG, "Reseting ESP to update parameters");
+                esp_restart();
             }
 
             xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
