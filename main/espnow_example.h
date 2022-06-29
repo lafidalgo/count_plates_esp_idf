@@ -66,7 +66,8 @@ enum
 typedef struct
 {
     uint8_t wifi_channel;
-    uint8_t type;      // Broadcast or unicast ESPNOW data.
+    uint8_t type; // Broadcast or unicast ESPNOW data.
+    bool is_ack;
     uint16_t crc;      // CRC16 value of ESPNOW data.
     float weightGrams; // Real payload of ESPNOW data.
     float quantityUnits;
