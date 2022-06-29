@@ -1033,6 +1033,7 @@ static void example_espnow_task(void *pvParameter)
                 {
                     ulpWakeUpPeriod = recv_ulpWakeUpPeriod;
                     nvsWriteUnsigned_16t("ulpWakeUpPeriod", ulpWakeUpPeriod);
+                    resetESP = true;
                 }
                 if (heartbeatPeriod != recv_heartbeatPeriod)
                 {
