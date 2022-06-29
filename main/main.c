@@ -64,6 +64,9 @@ const int ESP_NOW_BIT = BIT_3;
 #define ESPNOW_PMK "pmk1234567890123"
 #define ESPNOW_TIMEOUT 20
 
+#define SEND_WAKE_UP 1
+#define HEARTBEAT_WAKE_UP 2
+
 int last_type = 0;
 float last_weightGrams = 0;
 float last_quantityUnits = 0;
@@ -88,6 +91,7 @@ static RTC_DATA_ATTR uint16_t weightReference = 2000;
 static RTC_DATA_ATTR uint16_t repMeasureQtd = 5;
 static RTC_DATA_ATTR uint16_t ulpWakeUpPeriod = 1;
 static RTC_DATA_ATTR uint16_t heartbeatPeriod = 60;
+static RTC_DATA_ATTR uint16_t timerWakeUpType = 0;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -154,16 +158,32 @@ void enterDeepSleepTask(void *pvParameters)
         {
             struct timeval now;
             gettimeofday(&now, NULL);
-            int sleep_time_s = now.tv_sec - sleep_enter_time.tv_sec;
-            int remaining_wake_up = wakeup_message_time_sec - sleep_time_s;
-            if (remaining_wake_up < 0)
+            int sleep_time_s_send = now.tv_sec - sleep_enter_time.tv_sec;
+            int sleep_time_s_heartbeat = now.tv_sec - heartbeat_enter_time.tv_sec;
+            int remaining_wake_up_send = wakeup_message_time_sec - sleep_time_s_send;
+            int remaining_wake_up_heartbeat = wakeup_heartbeat_time_sec - sleep_time_s_heartbeat;
+            if (remaining_wake_up_send < 0)
             {
-                remaining_wake_up = 0;
+                remaining_wake_up_send = 0;
             }
-            ESP_LOGI(TAG, "Wake up send remaining time: %ds", remaining_wake_up);
-            esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
+            if (remaining_wake_up_heartbeat < 0)
+            {
+                remaining_wake_up_heartbeat = 0;
+            }
+            ESP_LOGI(TAG, "Wake up send remaining time: %ds", remaining_wake_up_send);
+            ESP_LOGI(TAG, "Wake up heartbeat remaining time: %ds", remaining_wake_up_heartbeat);
+            if (remaining_wake_up_send <= remaining_wake_up_heartbeat)
+            {
+                timerWakeUpType = SEND_WAKE_UP;
+                esp_sleep_enable_timer_wakeup(remaining_wake_up_send * 1000000);
+            }
+            else
+            {
+                timerWakeUpType = HEARTBEAT_WAKE_UP;
+                esp_sleep_enable_timer_wakeup(remaining_wake_up_heartbeat * 1000000);
+            }
         }
-        else if (wakeup_heartbeat_time_sec)
+        else
         {
             struct timeval now;
             gettimeofday(&now, NULL);
@@ -173,6 +193,7 @@ void enterDeepSleepTask(void *pvParameters)
             {
                 remaining_wake_up = 0;
             }
+            timerWakeUpType = HEARTBEAT_WAKE_UP;
             ESP_LOGI(TAG, "Wake up heartbeat remaining time: %ds", remaining_wake_up);
             esp_sleep_enable_timer_wakeup(remaining_wake_up * 1000000);
         }
@@ -347,13 +368,13 @@ void app_main(void)
         }
         uint32_t voltage_total = measure_battery(100);
         ESP_LOGI(TAG, "Battery Voltage: %dmV", voltage_total);
-        if (wakeup_message_time_sec)
+        if (timerWakeUpType == SEND_WAKE_UP)
         {
             quantityDifferenceAccumulate = 0;
             wakeup_message_time_sec = 0;
             example_espnow_send_data(EXAMPLE_ESPNOW_DATA_SEND, weightGrams, quantityUnits, voltage_total);
         }
-        else if (wakeup_heartbeat_time_sec)
+        else if (timerWakeUpType == HEARTBEAT_WAKE_UP)
         {
             gettimeofday(&heartbeat_enter_time, NULL);
             example_espnow_send_data(EXAMPLE_ESPNOW_DATA_HEARTBEAT, weightGrams, quantityUnits, voltage_total);
