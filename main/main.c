@@ -469,7 +469,7 @@ static void init_ulp_program(void)
     rtc_gpio_set_direction(gpio_num_addo, RTC_GPIO_MODE_INPUT_ONLY);
     rtc_gpio_pulldown_dis(gpio_num_addo);
     rtc_gpio_pullup_dis(gpio_num_addo);
-    rtc_gpio_hold_en(gpio_num_addo);
+    // rtc_gpio_hold_en(gpio_num_addo);
 
     /* GPIO used for sk output. */
     gpio_num_t gpio_num_adsk = GPIO_NUM_26;
@@ -478,7 +478,7 @@ static void init_ulp_program(void)
     rtc_gpio_set_direction(gpio_num_adsk, RTC_GPIO_MODE_OUTPUT_ONLY);
     rtc_gpio_pulldown_dis(gpio_num_adsk);
     rtc_gpio_pullup_dis(gpio_num_adsk);
-    rtc_gpio_hold_en(gpio_num_adsk);
+    // rtc_gpio_hold_en(gpio_num_adsk);
 
     uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
     // Acorda quando o valor medido é maior que o definido por Over
