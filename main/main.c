@@ -355,7 +355,6 @@ void app_main(void)
         float weightGrams = 0;
         float quantityUnits = 0;
         ESP_LOGI(TAG, "Wake up from timer");
-        xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
         ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
         uint32_t HX711Total = lastHX711Total;
         if (HX711Total)
@@ -450,7 +449,6 @@ void app_main(void)
         gettimeofday(&heartbeat_enter_time, NULL);
         wakeup_heartbeat_time_sec = heartbeatPeriod;
         uint32_t voltage_total = measure_battery(100);
-        xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
         example_espnow_send_data(EXAMPLE_ESPNOW_DATA_RESET, 0, 0, voltage_total);
     }
 
@@ -1107,6 +1105,8 @@ static void espnow_scan_channel_task(void *pvParameter)
 
 static esp_err_t example_espnow_send_data(int type, float weightGrams, float quantityUnits, uint32_t batVoltage)
 {
+    xEventGroupClearBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+
     if (!alreadyInitEspNow)
     {
         alreadyInitEspNow = true;
