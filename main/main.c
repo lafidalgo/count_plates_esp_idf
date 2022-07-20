@@ -807,6 +807,14 @@ void initVariablesFromNVS(void)
         heartbeatPeriod = nvsReadUnsigned_16t("heartbeatPeriod");
     }
     ESP_LOGI(TAG, "Heartbeat Period: %d", heartbeatPeriod);
+
+    repEspNowSend = nvsReadUnsigned_16t("repEspNowSend");
+    if (!repEspNowSend)
+    {
+        nvsWriteUnsigned_16t("repEspNowSend", 1);
+        repEspNowSend = nvsReadUnsigned_16t("repEspNowSend");
+    }
+    ESP_LOGI(TAG, "Repeat ESP Now Quantity: %d", repEspNowSend);
 }
 
 uint32_t measure_battery(int number_samples)
@@ -905,7 +913,7 @@ static void example_espnow_recv_cb(const uint8_t *mac_addr, const uint8_t *data,
 }
 
 /* Parse received ESPNOW data. */
-int example_espnow_data_parse(uint8_t *data, uint16_t data_len, bool *is_ack, uint16_t *weightReference, uint16_t *repMeasureQtd, uint16_t *ulpWakeUpPeriod, uint16_t *heartbeatPeriod)
+int example_espnow_data_parse(uint8_t *data, uint16_t data_len, bool *is_ack, uint16_t *weightReference, uint16_t *repMeasureQtd, uint16_t *ulpWakeUpPeriod, uint16_t *heartbeatPeriod, uint16_t *repEspNowSend)
 {
     example_espnow_data_t *buf = (example_espnow_data_t *)data;
     uint16_t crc, crc_cal = 0;
@@ -921,6 +929,7 @@ int example_espnow_data_parse(uint8_t *data, uint16_t data_len, bool *is_ack, ui
     *repMeasureQtd = buf->repMeasureQtd;
     *ulpWakeUpPeriod = buf->ulpWakeUpPeriod;
     *heartbeatPeriod = buf->heartbeatPeriod;
+    *repEspNowSend = buf->repEspNowSend;
     crc = buf->crc;
     buf->crc = 0;
     crc_cal = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, data_len);
@@ -951,6 +960,7 @@ void example_espnow_data_prepare(example_espnow_send_param_t *send_param, uint8_
     buf->repMeasureQtd = 0;
     buf->ulpWakeUpPeriod = 0;
     buf->heartbeatPeriod = 0;
+    buf->repEspNowSend = 0;
 
     buf->crc = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, send_param->len);
 }
@@ -963,6 +973,7 @@ static void example_espnow_task(void *pvParameter)
     uint16_t recv_repMeasureQtd = 0;
     uint16_t recv_ulpWakeUpPeriod = 0;
     uint16_t recv_heartbeatPeriod = 0;
+    uint16_t recv_repEspNowSend = 0;
     int ret;
 
     /* Start sending ESPNOW data. */
@@ -994,22 +1005,22 @@ static void example_espnow_task(void *pvParameter)
             example_espnow_event_recv_cb_t *recv_cb = &evt.info.recv_cb;
             bool resetESP = false;
 
-            ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_is_ack, &recv_weightReference, &recv_repMeasureQtd, &recv_ulpWakeUpPeriod, &recv_heartbeatPeriod);
+            ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_is_ack, &recv_weightReference, &recv_repMeasureQtd, &recv_ulpWakeUpPeriod, &recv_heartbeatPeriod, &recv_repEspNowSend);
             free(recv_cb->data);
 
             if (recv_is_ack)
             {
                 if (ret == EXAMPLE_ESPNOW_DATA_SEND)
                 {
-                    ESP_LOGI(TAG, "Received send data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod);
+                    ESP_LOGI(TAG, "Received send data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d, repEspNowSend: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod, recv_repEspNowSend);
                 }
                 else if (ret == EXAMPLE_ESPNOW_DATA_HEARTBEAT)
                 {
-                    ESP_LOGI(TAG, "Received heartbeat data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod);
+                    ESP_LOGI(TAG, "Received heartbeat data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d, repEspNowSend: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod, recv_repEspNowSend);
                 }
                 else if (ret == EXAMPLE_ESPNOW_DATA_RESET)
                 {
-                    ESP_LOGI(TAG, "Received reset data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod);
+                    ESP_LOGI(TAG, "Received reset data ACK from: " MACSTR ", len: %d, weightReference: %d, repMeasureQtd: %d, ulpWakeUpPeriod: %d, heartbeatPeriod: %d, repEspNowSend: %d", MAC2STR(recv_cb->mac_addr), recv_cb->data_len, recv_weightReference, recv_repMeasureQtd, recv_ulpWakeUpPeriod, recv_heartbeatPeriod, recv_repEspNowSend);
                 }
                 else
                 {
@@ -1040,6 +1051,12 @@ static void example_espnow_task(void *pvParameter)
                 {
                     heartbeatPeriod = recv_heartbeatPeriod;
                     nvsWriteUnsigned_16t("heartbeatPeriod", heartbeatPeriod);
+                    resetESP = true;
+                }
+                if (repEspNowSend != recv_repEspNowSend)
+                {
+                    repEspNowSend = recv_repEspNowSend;
+                    nvsWriteUnsigned_16t("repEspNowSend", repEspNowSend);
                     resetESP = true;
                 }
 

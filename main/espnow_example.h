@@ -76,6 +76,7 @@ typedef struct
     uint16_t repMeasureQtd;
     uint16_t ulpWakeUpPeriod;
     uint16_t heartbeatPeriod;
+    uint16_t repEspNowSend;
 } __attribute__((packed)) example_espnow_data_t;
 
 /* Parameters of sending ESPNOW data. */
