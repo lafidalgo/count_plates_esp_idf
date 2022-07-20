@@ -92,6 +92,7 @@ static RTC_DATA_ATTR uint16_t repMeasureQtd = 5;
 static RTC_DATA_ATTR uint16_t ulpWakeUpPeriod = 1;
 static RTC_DATA_ATTR uint16_t heartbeatPeriod = 60;
 static RTC_DATA_ATTR uint16_t timerWakeUpType = 0;
+static RTC_DATA_ATTR uint16_t repEspNowSend = 2;
 
 const int ext_wakeup_pin_1 = 2;
 const int ext_wakeup_pin_2 = 4;
@@ -1070,6 +1071,7 @@ static void example_espnow_task(void *pvParameter)
 static void espnow_scan_channel_task(void *pvParameter)
 {
     bool alreadyInit = false;
+    uint16_t countRepEspNowSend = 1;
     while (1)
     {
         xSemaphoreTake(xSemaphoreEspNowTimeout, portMAX_DELAY);
@@ -1084,6 +1086,21 @@ static void espnow_scan_channel_task(void *pvParameter)
             if (wifi_channel < 11)
             {
                 wifi_channel++;
+                example_espnow_send_data(last_type, last_weightGrams, last_quantityUnits, last_batVoltage);
+            }
+            else
+            {
+                esp_now_deinit();
+                esp_wifi_stop();
+                xEventGroupSetBits(xEventGroupDeepSleep, ESP_NOW_BIT);
+                vTaskDelete(NULL);
+            }
+        }
+        else if (last_type == EXAMPLE_ESPNOW_DATA_SEND)
+        {
+            if (countRepEspNowSend < repEspNowSend)
+            {
+                countRepEspNowSend++;
                 example_espnow_send_data(last_type, last_weightGrams, last_quantityUnits, last_batVoltage);
             }
             else
