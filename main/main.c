@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "esp_sleep.h"
 #include "esp_log.h"
@@ -364,11 +365,14 @@ void app_main(void)
             weightGrams = ((float)HX711Total - (float)tare) / calibration;
             ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-            if(quantityUnits < 0){
+            if (quantityUnits < 0)
+            {
                 ESP_LOGW(TAG, "Quantidade de unidades menor que zero.");
                 quantityUnits = 0;
             }
             ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
+            quantityUnits = roundf(quantityUnits);
+            ESP_LOGI(TAG, "Quantidade arredondada: %.2f", quantityUnits);
         }
         uint32_t voltage_total = measure_battery(100);
         ESP_LOGI(TAG, "Battery Voltage: %dmV", voltage_total);
@@ -395,11 +399,14 @@ void app_main(void)
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
             ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-            if(quantityUnits < 0){
+            if (quantityUnits < 0)
+            {
                 ESP_LOGW(TAG, "Quantidade de unidades menor que zero.");
                 quantityUnits = 0;
             }
             ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
+            quantityUnits = roundf(quantityUnits);
+            ESP_LOGI(TAG, "Quantidade arredondada: %.2f", quantityUnits);
 
             uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
