@@ -59,7 +59,7 @@ const int ESP_NOW_BIT = BIT_3;
 #define UnitDifferenceMediumPriority 2
 #define UnitDifferenceHighPriority 5
 #define measureSignalReference -1 // O valor diminuir quando aumenta o peso
-#define ulpWakeUpPeriodFast 1000  // Em us (1 ms)
+#define ulpWakeUpPeriodFast 10000 // Em us (10 ms)
 
 #define ESPNOW_MAXDELAY 512
 #define ESPNOW_PMK "pmk1234567890123"
@@ -229,6 +229,7 @@ void tareTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Tare Task.");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
         ulp_setRepeatMeasure = 1;
         ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
@@ -250,6 +251,7 @@ void calibrateTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Calibrate Task.");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
         ulp_setRepeatMeasure = 1;
         ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
@@ -272,6 +274,7 @@ void setUnitTask(void *pvParameters)
     {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         ESP_LOGI(TAG, "Set Unit Task.");
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
         ulp_setRepeatMeasure = 1;
         ulp_set_wakeup_period(0, ulpWakeUpPeriodFast);
         uint32_t HX711Total = readWeight();
