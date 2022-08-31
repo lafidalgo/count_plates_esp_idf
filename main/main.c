@@ -63,7 +63,7 @@ const int ESP_NOW_BIT = BIT_3;
 
 #define ESPNOW_MAXDELAY 512
 #define ESPNOW_PMK "pmk1234567890123"
-#define ESPNOW_TIMEOUT 20
+#define ESPNOW_TIMEOUT 50
 
 #define SEND_WAKE_UP 1
 #define HEARTBEAT_WAKE_UP 2
@@ -399,14 +399,6 @@ void app_main(void)
             float weightGrams = ((float)HX711Total - (float)tare) / calibration;
             ESP_LOGI(TAG, "Peso: %.2f g", weightGrams);
             float quantityUnits = ((float)HX711Total - (float)tare) / (float)unitWeight;
-            if (quantityUnits < 0)
-            {
-                ESP_LOGW(TAG, "Quantidade de unidades menor que zero.");
-                quantityUnits = 0;
-            }
-            ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
-            quantityUnits = roundf(quantityUnits);
-            ESP_LOGI(TAG, "Quantidade arredondada: %.2f", quantityUnits);
 
             uint32_t weightDifference = unitWeight * (minUnitDifference + 0.5) * measureSignalReference;
             // Acorda quando o valor medido é maior que o definido por Over
@@ -428,6 +420,14 @@ void app_main(void)
             }
             quantityDifferenceAccumulate += quantityDifference;
 
+            if (quantityUnits < 0)
+            {
+                ESP_LOGW(TAG, "Quantidade de unidades menor que zero.");
+                quantityUnits = 0;
+            }
+            ESP_LOGI(TAG, "Quantidade: %.2f", quantityUnits);
+            quantityUnits = roundf(quantityUnits);
+            ESP_LOGI(TAG, "Quantidade arredondada: %.2f", quantityUnits);
             ESP_LOGI(TAG, "Diferença acumulada na quantidade: %.2f", quantityDifferenceAccumulate);
 
             if (quantityDifferenceAccumulate <= (minUnitDifference + 0.5)) // Até 0.5 de diferença
@@ -436,19 +436,19 @@ void app_main(void)
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceLowPriority + 0.5)) // De 0.5 a 1.5 de diferença
             {
-                wakeup_message_time_sec = 90; // 15 min
+                wakeup_message_time_sec = 300; // 15 min
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceMediumPriority + 0.5)) // De 1.5 a 2.5 de diferença
             {
-                wakeup_message_time_sec = 60; // 10 min
+                wakeup_message_time_sec = 180; // 10 min
             }
             else if (quantityDifferenceAccumulate <= (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // De 2.5 a 5.5 de diferença
             {
-                wakeup_message_time_sec = 30; // 5 min
+                wakeup_message_time_sec = 120; // 5 min
             }
             else if (quantityDifferenceAccumulate > (minUnitDifference + UnitDifferenceHighPriority + 0.5)) // Maior que 5.5
             {
-                wakeup_message_time_sec = 6; // 1 min
+                wakeup_message_time_sec = 60; // 1 min
             }
 
             lastQuantity = quantityUnits;
@@ -1115,7 +1115,7 @@ static void espnow_scan_channel_task(void *pvParameter)
                 wifi_channel = 0;
                 alreadyInit = true;
             }
-            if (wifi_channel < 11)
+            if (wifi_channel < 13)
             {
                 wifi_channel++;
                 example_espnow_send_data(last_type, last_weightGrams, last_quantityUnits, last_batVoltage);
